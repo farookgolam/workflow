@@ -3,7 +3,8 @@
 #
 # Downloads win-acme (the Let's Encrypt client for Windows) and its Cloudflare plugin into C:\tools\win-acme (both
 # checked against pinned SHA-256 checksums), then asks for:
-#   - a Cloudflare API token with Zone.DNS:Edit and Zone.Zone:Read (typed hidden; never shown or logged here), and
+#   - a Cloudflare API token with Zone.DNS:Edit and Zone.Zone:Read (read from the clipboard, which is then cleared;
+#     never shown or logged here), and
 #   - an email address for Let's Encrypt notices.
 # It requests ONE certificate for <domain> and *.<domain>, proving ownership through a temporary DNS record in
 # Cloudflare (so port 80 does not have to be open), puts it in the Windows certificate store and creates the https
@@ -54,9 +55,12 @@ if (-not $siteId) { throw "IIS site '$Site' not found - install the app first" }
 "  $Site is site id $siteId"
 
 "== 3. Details =="
-$secure = Read-Host "  Paste the Cloudflare API token (it stays hidden), then press Enter" -AsSecureString
-$token  = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
-if ($token.Length -lt 20) { throw 'that does not look like a Cloudflare API token' }
+# read from the clipboard rather than a hidden prompt: pasting into a hidden prompt over Remote Desktop can lose characters
+Read-Host "  Copy the Cloudflare API token (Cloudflare's Copy button), then press Enter here" | Out-Null
+$token = "$(Get-Clipboard -Raw)".Trim()
+Set-Clipboard -Value ' '   # do not leave the token on the clipboard
+if ($token -notmatch '^[A-Za-z0-9_-]{30,}$') { throw "the clipboard does not hold a Cloudflare API token ($($token.Length) characters) - copy it again and re-run" }
+"  token read from the clipboard ($($token.Length) characters) and the clipboard cleared"
 $email = Read-Host '  Email address for Let''s Encrypt notices'
 if ($email -notmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$') { throw "'$email' is not an email address" }
 
