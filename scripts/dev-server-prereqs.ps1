@@ -22,7 +22,7 @@ $tmp = Join-Path $env:TEMP 'af-dev-prereqs'; New-Item -ItemType Directory -Force
 function Refresh-Path { $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User') }
 function Get-Signed($url, $file) {
   $path = Join-Path $tmp $file
-  "  downloading $url"
+  Write-Host "  downloading $url"   # Write-Host, not output: the function must return only the path
   Invoke-WebRequest -UseBasicParsing $url -OutFile $path
   $sig = Get-AuthenticodeSignature $path
   if ($sig.Status -ne 'Valid') { throw "$file signature is $($sig.Status) - not running it" }
