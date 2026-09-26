@@ -61,6 +61,25 @@ $token = "$(Get-Clipboard -Raw)".Trim()
 Set-Clipboard -Value ' '   # do not leave the token on the clipboard
 if ($token -notmatch '^[A-Za-z0-9_-]{30,}$') { throw "the clipboard does not hold a Cloudflare API token ($($token.Length) characters) - copy it again and re-run" }
 "  token read from the clipboard ($($token.Length) characters) and the clipboard cleared"
+# ask Cloudflare first, so a bad token gives a clear reason instead of win-acme's "No zones could be found"
+$cf = @{ Authorization = "Bearer $token" }
+try { $v = Invoke-RestMethod -UseBasicParsing -Headers $cf 'https://api.cloudflare.com/client/v4/user/tokens/verify' }
+catch {
+  $why = if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+  throw "Cloudflare rejected the token ($why) - roll it again, copy the NEW value and re-run"
+}
+"  Cloudflare says the token is: $($v.result.status)"
+$labels = $Domain.Split('.')
+$zone = $null
+for ($i = 0; $i -lt $labels.Count - 1 -and -not $zone; $i++) {
+  $name = ($labels[$i..($labels.Count - 1)] -join '.')
+  $zone = (Invoke-RestMethod -UseBasicParsing -Headers $cf "https://api.cloudflare.com/client/v4/zones?name=$name").result | Select-Object -First 1
+}
+if (-not $zone) {
+  $all = (Invoke-RestMethod -UseBasicParsing -Headers $cf 'https://api.cloudflare.com/client/v4/zones').result
+  throw "the token is valid but cannot see the zone for $Domain (it can see: $(if ($all) { ($all.name -join ', ') } else { 'no zones at all' })) - give it the Cloudflare account that holds that zone"
+}
+"  the token can see zone $($zone.name) (account: $($zone.account.name))"
 $email = Read-Host '  Email address for Let''s Encrypt notices'
 if ($email -notmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$') { throw "'$email' is not an email address" }
 
