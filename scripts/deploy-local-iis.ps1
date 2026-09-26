@@ -16,7 +16,12 @@
 # (with powershell -File, quote each one: -Hosts "acme.approvalflow.localhost","globex.approvalflow.localhost")
 # (*.localhost resolves to 127.0.0.1 in Chrome and Edge without touching DNS or the hosts file.)
 # The global management console is served at http://localhost:<SitePort>/global.
-param([int]$SitePort = 8088, [int]$ApiPort = 4110, [string[]]$Hosts = @(), [switch]$Remove)
+#
+# Public HTTPS: pass -PublicDomain vwf.example.com. The site then keeps the production web.config (the API is told the
+# connection is https, and HSTS stays on), redirects plain http for that domain to https, and gets http bindings on
+# port 80 for <domain> and *.<domain>. The https bindings on 443 belong to the certificate tool
+# (scripts\azure-vm-https.ps1 / win-acme) and are never touched here.
+param([int]$SitePort = 8088, [int]$ApiPort = 4110, [string[]]$Hosts = @(), [string]$PublicDomain = '', [switch]$Remove)
 
 $ErrorActionPreference = 'Stop'
 $root    = Split-Path -Parent $PSScriptRoot
@@ -61,14 +66,31 @@ Push-Location (Join-Path $root 'client'); npm run --silent build; if (-not $?) {
 "== Publishing static files to $webRoot =="
 New-Item -ItemType Directory -Force $webRoot | Out-Null
 robocopy (Join-Path $root 'client\dist') $webRoot /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
-# local trial runs over plain HTTP on a different API port: adjust the copied web.config (the source file stays production-ready)
-$cfg = Join-Path $webRoot 'web.config'
-(Get-Content $cfg -Raw).
-  Replace('http://localhost:4100/api/', "http://localhost:$ApiPort/api/").
-  Replace('<set name="HTTP_X_FORWARDED_PROTO" value="https" />', '<set name="HTTP_X_FORWARDED_PROTO" value="http" />').
-  Replace('        <add name="Strict-Transport-Security" value="max-age=31536000" />' + "`r`n", '').
-  Replace('        <add name="Strict-Transport-Security" value="max-age=31536000" />' + "`n", '') |
-  Set-Content $cfg -Encoding ascii
+# adjust the copied web.config (the source file stays production-ready): the API port always; for a local trial over
+# plain HTTP also the forwarded protocol and HSTS; for a public domain, add the http -> https redirect instead
+$cfg  = Join-Path $webRoot 'web.config'
+$text = (Get-Content $cfg -Raw).Replace('http://localhost:4100/api/', "http://localhost:$ApiPort/api/")
+if ($PublicDomain) {
+  $PublicDomain = $PublicDomain.Trim().ToLower()
+  $pattern  = '^(.+\.)?' + [regex]::Escape($PublicDomain) + '$'
+  $redirect = @"
+        <rule name="HttpsRedirect" stopProcessing="true">
+          <match url="(.*)" />
+          <conditions logicalGrouping="MatchAll">
+            <add input="{HTTPS}" pattern="^OFF$" />
+            <add input="{HTTP_HOST}" pattern="$pattern" />
+          </conditions>
+          <action type="Redirect" url="https://{HTTP_HOST}/{R:1}" redirectType="Permanent" />
+        </rule>
+"@
+  $text = $text -replace '(<rules>\r?\n)', ('$1' + $redirect.Replace('$', '$$') + "`r`n")
+} else {
+  $text = $text.
+    Replace('<set name="HTTP_X_FORWARDED_PROTO" value="https" />', '<set name="HTTP_X_FORWARDED_PROTO" value="http" />').
+    Replace('        <add name="Strict-Transport-Security" value="max-age=31536000" />' + "`r`n", '').
+    Replace('        <add name="Strict-Transport-Security" value="max-age=31536000" />' + "`n", '')
+}
+$text | Set-Content $cfg -Encoding ascii
 
 "== IIS site =="
 # the proxy rule passes the customer's host name through to the API; IIS will not let a rule set a
@@ -94,6 +116,16 @@ foreach ($h in $Hosts) {
     "Added binding $binding"
   }
 }
+if ($PublicDomain) {
+  # port 80 only answers with the redirect above; the real site is https on 443 (bindings made by the certificate tool)
+  foreach ($h in $PublicDomain, "*.$PublicDomain") {
+    $existing = & $appcmd list site /name:$name /text:bindings
+    if ($existing -notlike "*http/*:80:$h*") {
+      & $appcmd set site /site.name:$name /+"bindings.[protocol='http',bindingInformation='*:80:$h']" | Out-Null
+      "Added binding http/*:80:$h"
+    }
+  }
+}
 
 & $appcmd start site $name | Out-Null
 
@@ -115,9 +147,16 @@ Set-Content $pidFile $api.Id
 "Started a background API process (PID $($api.Id)) - install the Windows service for something long-lived"
 }
 
-Start-Sleep -Seconds 5
 "== Verify =="
-foreach ($u in "http://localhost:$SitePort/api/v1/health", "http://localhost:$SitePort/", "http://localhost:$SitePort/admin/requests", "http://localhost:$SitePort/global") {
+# the API needs a few seconds after a restart: wait for its health check (up to a minute) before judging it
+$healthUrl = "http://localhost:$SitePort/api/v1/health"
+for ($i = 0; $i -lt 12; $i++) {
+  Start-Sleep -Seconds 5
+  try { if ((Invoke-WebRequest -UseBasicParsing $healthUrl).StatusCode -eq 200) { break } } catch { }
+}
+$checks = @($healthUrl, "http://localhost:$SitePort/", "http://localhost:$SitePort/admin/requests", "http://localhost:$SitePort/global")
+if ($PublicDomain) { $checks += "https://$PublicDomain/api/v1/health" }
+foreach ($u in $checks) {
   try { $r = Invoke-WebRequest -UseBasicParsing $u; "{0}  {1}  {2}" -f $r.StatusCode, $u, ($r.Content.Substring(0, [Math]::Min(40, $r.Content.Length)) -replace '\s+', ' ') }
   catch { "FAILED  $u  $($_.Exception.Message)" }
 }

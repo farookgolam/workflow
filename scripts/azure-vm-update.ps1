@@ -77,4 +77,8 @@ Push-Location $server; Invoke-Npm run --silent migrate; Pop-Location
 $hosts = @(sqlcmd -S . -E -C -b -h -1 -W -Q "SET NOCOUNT ON; SELECT COALESCE(Host, Slug + '.$AppDomain') FROM ApprovalFlow.dbo.Tenants WHERE RemovedAt IS NULL" |
            ForEach-Object { $_.Trim() } | Where-Object { $_ })
 if ($LASTEXITCODE -ne 0) { throw 'could not read the customer list' }
-& (Join-Path $AppRoot 'scripts\deploy-local-iis.ps1') -SitePort $SitePort -ApiPort $ApiPort -Hosts $hosts
+# a real domain in server\.env APP_DOMAIN (not *.localhost) means the site is public: https, redirect, port 80 bindings
+$envDomain = (Get-Content (Join-Path $server '.env') | Where-Object { $_ -match '^\s*APP_DOMAIN\s*=' } | Select-Object -First 1) -replace '^\s*APP_DOMAIN\s*=\s*', ''
+$public = @{}
+if ($envDomain -and $envDomain.Trim() -notmatch '(^|\.)localhost$') { $public.PublicDomain = $envDomain.Trim(); "  public site: $($public.PublicDomain)" }
+& (Join-Path $AppRoot 'scripts\deploy-local-iis.ps1') -SitePort $SitePort -ApiPort $ApiPort -Hosts $hosts @public

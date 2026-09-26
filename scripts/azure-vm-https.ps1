@@ -1,0 +1,69 @@
+# One-time HTTPS certificate for the public site, on the Azure VM. Run elevated, AFTER the DNS records exist:
+#   powershell -ExecutionPolicy Bypass -File C:\apps\approvalflow\scripts\azure-vm-https.ps1 -Domain vwf.filebankinc.com
+#
+# Downloads win-acme (the Let's Encrypt client for Windows) and its Cloudflare plugin into C:\tools\win-acme (the
+# signature of wacs.exe is checked), then asks for:
+#   - a Cloudflare API token with Zone.DNS:Edit and Zone.Zone:Read (typed hidden; never shown or logged here), and
+#   - an email address for Let's Encrypt notices.
+# It requests ONE certificate for <domain> and *.<domain>, proving ownership through a temporary DNS record in
+# Cloudflare (so port 80 does not have to be open), puts it in the Windows certificate store and creates the https
+# bindings on port 443 of the IIS site ApprovalFlow. win-acme keeps the token encrypted and renews the certificate
+# by itself (a daily scheduled task) - nothing to do every 90 days. Safe to re-run.
+param(
+  [Parameter(Mandatory = $true)][string]$Domain,
+  [string]$Site    = 'ApprovalFlow',
+  [string]$ToolDir = 'C:\tools\win-acme',
+  [string]$Version = 'v2.2.9.1701'
+)
+
+$ErrorActionPreference = 'Stop'
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$ProgressPreference = 'SilentlyContinue'
+$Domain = $Domain.Trim().ToLower()
+$appcmd = "$env:windir\system32\inetsrv\appcmd.exe"
+
+"== 1. win-acme $Version =="
+$wacs = Join-Path $ToolDir 'wacs.exe'
+if (Test-Path $wacs) { "  already in $ToolDir" }
+else {
+  New-Item -ItemType Directory -Force $ToolDir | Out-Null
+  $base = "https://github.com/win-acme/win-acme/releases/download/$Version"
+  $ver  = $Version.TrimStart('v')
+  foreach ($zip in "win-acme.v$ver.x64.pluggable.zip", "plugin.validation.dns.cloudflare.v$ver.zip") {
+    $path = Join-Path $env:TEMP $zip
+    "  downloading $zip"
+    Invoke-WebRequest -UseBasicParsing "$base/$zip" -OutFile $path
+    Expand-Archive $path $ToolDir -Force
+  }
+  $sig = Get-AuthenticodeSignature $wacs
+  if ($sig.Status -ne 'Valid') { Remove-Item $ToolDir -Recurse -Force; throw "wacs.exe signature is $($sig.Status) - not running it" }
+  "  signature valid: $($sig.SignerCertificate.Subject)"
+}
+
+"== 2. IIS site =="
+$siteId = (& $appcmd list site /name:$Site /text:id)
+if (-not $siteId) { throw "IIS site '$Site' not found - install the app first" }
+"  $Site is site id $siteId"
+
+"== 3. Details =="
+$secure = Read-Host "  Paste the Cloudflare API token (it stays hidden), then press Enter" -AsSecureString
+$token  = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+if ($token.Length -lt 20) { throw 'that does not look like a Cloudflare API token' }
+$email = Read-Host '  Email address for Let''s Encrypt notices'
+if ($email -notmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$') { throw "'$email' is not an email address" }
+
+"== 4. Certificate for $Domain and *.$Domain (1-3 minutes) =="
+& $wacs --source manual --host "$Domain,*.$Domain" `
+        --validationmode dns-01 --validation cloudflare --cloudflareapitoken $token `
+        --store certificatestore --installation iis --installationsiteid $siteId `
+        --accepttos --emailaddress $email --closeonfinish
+$code = $LASTEXITCODE
+$token = $null
+if ($code -ne 0) { throw "win-acme failed (exit code $code) - read its messages above" }
+
+"== 5. Result =="
+& $appcmd list site /name:$Site /text:bindings
+$task = Get-ScheduledTask | Where-Object TaskName -like 'win-acme*' | Select-Object -First 1
+"  automatic renewal: " + $(if ($task) { "scheduled task '$($task.TaskName)' ($($task.State))" } else { 'NO scheduled task found - tell Claude' })
+try { "  https://$Domain/api/v1/health -> " + (Invoke-WebRequest -UseBasicParsing "https://$Domain/api/v1/health").Content }
+catch { "  https://$Domain/api/v1/health -> $($_.Exception.Message) (expected until the Azure firewall allows 443 - test from the VM itself works once the app settings are switched)" }
