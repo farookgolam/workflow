@@ -1,8 +1,8 @@
 # One-time HTTPS certificate for the public site, on the Azure VM. Run elevated, AFTER the DNS records exist:
 #   powershell -ExecutionPolicy Bypass -File C:\apps\approvalflow\scripts\azure-vm-https.ps1 -Domain vwf.filebankinc.com
 #
-# Downloads win-acme (the Let's Encrypt client for Windows) and its Cloudflare plugin into C:\tools\win-acme (the
-# signature of wacs.exe is checked), then asks for:
+# Downloads win-acme (the Let's Encrypt client for Windows) and its Cloudflare plugin into C:\tools\win-acme (both
+# checked against pinned SHA-256 checksums), then asks for:
 #   - a Cloudflare API token with Zone.DNS:Edit and Zone.Zone:Read (typed hidden; never shown or logged here), and
 #   - an email address for Let's Encrypt notices.
 # It requests ONE certificate for <domain> and *.<domain>, proving ownership through a temporary DNS record in
@@ -28,16 +28,24 @@ if (Test-Path $wacs) { "  already in $ToolDir" }
 else {
   New-Item -ItemType Directory -Force $ToolDir | Out-Null
   $base = "https://github.com/win-acme/win-acme/releases/download/$Version"
-  $ver  = $Version.TrimStart('v')
+  # wacs.exe is signed with win-acme's own self-signed (and since Feb 2026 expired) certificate, so its signature proves
+  # nothing; the downloads are pinned to known SHA-256 checksums instead: the main zip's matches the one Chocolatey
+  # publishes for it, the plugin's was taken from an independent download on the development PC (2026-09-26)
+  $pinned = @{
+    'win-acme.v2.2.9.1701.x64.pluggable.zip'           = 'A2C874E9893A1D91E0329887F72C067DCC49800A49963FA7D61C5A4E09058F0C'
+    'plugin.validation.dns.cloudflare.v2.2.9.1701.zip' = '3261C9334AF67AA380C0479A5BE43E60BE46B4282CDD51C81DB0CE4ACE838CA2'
+  }
+  $ver = $Version.TrimStart('v')
   foreach ($zip in "win-acme.v$ver.x64.pluggable.zip", "plugin.validation.dns.cloudflare.v$ver.zip") {
+    if (-not $pinned[$zip]) { throw "no known checksum for $zip - only $($pinned.Keys -join ', ') can be installed" }
     $path = Join-Path $env:TEMP $zip
     "  downloading $zip"
     Invoke-WebRequest -UseBasicParsing "$base/$zip" -OutFile $path
+    $hash = (Get-FileHash $path -Algorithm SHA256).Hash
+    if ($hash -ne $pinned[$zip]) { Remove-Item $path; throw "$zip has checksum $hash, expected $($pinned[$zip]) - not installing it" }
+    "  checksum verified"
     Expand-Archive $path $ToolDir -Force
   }
-  $sig = Get-AuthenticodeSignature $wacs
-  if ($sig.Status -ne 'Valid') { Remove-Item $ToolDir -Recurse -Force; throw "wacs.exe signature is $($sig.Status) - not running it" }
-  "  signature valid: $($sig.SignerCertificate.Subject)"
 }
 
 "== 2. IIS site =="
