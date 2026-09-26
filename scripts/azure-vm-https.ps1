@@ -56,7 +56,8 @@ if (-not $siteId) { throw "IIS site '$Site' not found - install the app first" }
 
 "== 3. Details =="
 # read from the clipboard rather than a hidden prompt: pasting into a hidden prompt over Remote Desktop can lose characters
-Read-Host "  Copy the Cloudflare API token (Cloudflare's Copy button), then press Enter here" | Out-Null
+# -AsSecureString: if the token is pasted here anyway instead of just pressing Enter, it is not echoed to the screen
+Read-Host "  Copy the Cloudflare API token (Cloudflare's Copy button), then just press Enter here - do not paste" -AsSecureString | Out-Null
 $token = "$(Get-Clipboard -Raw)".Trim()
 Set-Clipboard -Value ' '   # do not leave the token on the clipboard
 if ($token -notmatch '^[A-Za-z0-9_-]{30,}$') { throw "the clipboard does not hold a Cloudflare API token ($($token.Length) characters) - copy it again and re-run" }
