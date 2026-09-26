@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Employee Timesheet</title>
+<style>
+  :root {
+    --text:#333; --label:#212529; --border:#ced4da; --border-soft:#dee2e6; --readonly:#e9ecef; --seg:#f1f3f5;
+    --bad:#dc3545; --accent:#1890ff; --maroon:#7b1c2c; --h:36px;
+  }
+  * { box-sizing:border-box; }
+  html { background:#fff; }
+  body { margin:0; color:var(--text); font:14px/1.4 "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; border-left:4px solid #eceef0; min-height:100vh; }
+  .sheet { max-width:1140px; margin:0 auto; padding:34px 36px 60px; }
+
+  /* ---------- header ---------- */
+  .top { position:relative; display:flex; align-items:center; justify-content:center; min-height:104px; padding:0 0 22px 8px; border-bottom:4px solid #1f1f1f; margin-bottom:14px; }
+  .top .logo { position:absolute; left:8px; top:0; width:96px; height:96px; }
+  .top h1 { margin:0; font-size:35px; font-weight:600; color:#343a40; letter-spacing:.2px; }
+
+  /* ---------- panels + layout ---------- */
+  .panel { border:1px solid var(--border-soft); box-shadow:0 0 0 3px #fff, 0 0 0 4px #eef0f2; padding:22px 14px 26px; margin:4px 4px 18px; }
+  .row { display:grid; grid-template-columns:1fr 1fr; column-gap:24px; margin-bottom:26px; }
+  .row:last-child { margin-bottom:0; }
+  .row.one { grid-template-columns:1fr; }
+  .split-2 { display:grid; grid-template-columns:1fr 1fr; column-gap:24px; }
+  .split-3 { display:grid; grid-template-columns:1fr 1fr 1fr; column-gap:24px; }
+
+  label, .label { display:block; margin:0 0 10px; font-size:13.5px; font-weight:600; color:var(--label); }
+  .req::after { content:" *"; color:var(--bad); font-weight:400; }
+  .section-title { margin:0 0 24px; font-size:13.5px; font-weight:700; color:var(--label); }
+
+  /* ---------- inputs ---------- */
+  input, select, textarea { width:100%; height:var(--h); padding:6px 12px; font:inherit; color:#495057; background:#fff; border:1px solid var(--border); border-radius:3px; outline:0; }
+  input::placeholder { color:#9aa1a9; }
+  input[readonly] { background:var(--readonly); }
+  textarea { height:100px; min-height:60px; resize:vertical; display:block; }
+  input:focus, select:focus, textarea:focus { border-color:#80bdff; box-shadow:0 0 0 .18rem rgba(0,123,255,.18); }
+
+  /* drop-down: white box + grey arrow segment */
+  .dd { position:relative; }
+  .dd select { appearance:none; -webkit-appearance:none; padding-right:44px; cursor:pointer; }
+  .dd::after { content:""; position:absolute; top:1px; right:1px; bottom:1px; width:32px; background:var(--seg); border-left:1px solid var(--border); border-radius:0 2px 2px 0; pointer-events:none; }
+  .dd::before { content:""; position:absolute; z-index:1; right:12px; top:50%; margin-top:-2px; border:5px solid transparent; border-top-color:#343a40; border-bottom-width:0; pointer-events:none; }
+
+  /* date: empty box + calendar segment */
+  .date { position:relative; }
+  .date input { padding-right:44px; }
+  .date input::-webkit-calendar-picker-indicator { position:absolute; top:0; right:0; width:32px; height:100%; margin:0; padding:0; opacity:0; cursor:pointer; }
+  .date input:not(.has-value):not(:focus)::-webkit-datetime-edit { color:transparent; }
+  .date::after { content:""; position:absolute; top:1px; right:1px; bottom:1px; width:32px; background:var(--seg); border-left:1px solid var(--border); border-radius:0 2px 2px 0; pointer-events:none; }
+  .date svg { position:absolute; z-index:1; right:9px; top:50%; width:15px; height:15px; margin-top:-7.5px; pointer-events:none; color:#495057; }
+
+  /* phone: flag segment + number */
+  .phone { display:flex; }
+  .phone .cc { position:relative; flex:0 0 66px; }
+  .phone .cc select { appearance:none; -webkit-appearance:none; height:var(--h); padding:0 0 0 12px; background:var(--seg); border-radius:3px 0 0 3px; border-right:0; color:transparent; cursor:pointer; }
+  .phone .cc select option { color:#333; }
+  .phone .cc .flag { position:absolute; left:13px; top:50%; margin-top:-7px; width:21px; height:14px; pointer-events:none; border-radius:1px; overflow:hidden; }
+  .phone .cc::after { content:""; position:absolute; right:10px; top:50%; width:5px; height:5px; margin-top:-5px; border-right:1.5px solid #555; border-bottom:1.5px solid #555; transform:rotate(45deg); pointer-events:none; }
+  .phone .num { position:relative; flex:1; }
+  .phone .num input { border-radius:0 3px 3px 0; padding-left:40px; }
+  .phone .num .dial { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#495057; pointer-events:none; }
+
+  /* validation */
+  .error { display:none; margin-top:6px; color:var(--bad); font-size:11.5px; }
+  .invalid .error { display:block; }
+  .invalid input, .invalid select, .invalid textarea, .invalid .sig-box { border-color:var(--bad); }
+
+  /* ---------- timesheet grid ---------- */
+  .ts { border:1px solid #cfd4da; background:#fff; }
+  .ts-toolbar { padding:9px 10px; background:#f8f9fa; border-bottom:1px solid #cfd4da; }
+  .btn-add { height:34px; padding:0 14px; font:inherit; font-size:13.5px; color:#212529; background:#e4e7eb; border:1px solid #e4e7eb; border-radius:3px; cursor:pointer; }
+  .btn-add:hover { background:#d9dde2; }
+  .btn-add .plus { display:inline-block; margin-right:10px; font-size:16px; line-height:1; vertical-align:-1px; }
+  table { width:100%; border-collapse:collapse; table-layout:fixed; }
+  thead th { position:relative; height:40px; padding:0 34px 0 10px; text-align:left; font-size:13.5px; font-weight:500; color:#212529; background:#fff; border-right:1px solid #cfd4da; border-bottom:1px solid #cfd4da; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  thead th.menu::after { content:""; position:absolute; right:13px; top:50%; margin-top:-2px; border:4.5px solid transparent; border-top-color:#343a40; border-bottom-width:0; }
+  thead th.cmd { padding:0; }
+  thead th.gutter { width:17px; padding:0; border-right:0; background:#f8f9fa; }
+  tbody td { padding:5px 6px; border-top:1px solid var(--border-soft); border-right:1px solid var(--border-soft); vertical-align:middle; }
+  tbody td:last-child { border-right:0; }
+  tbody td input, tbody td select { height:32px; padding:4px 8px; }
+  tbody td .dd select { padding-right:36px; }
+  tbody td .dd::after { width:28px; } tbody td .dd::before { right:10px; }
+  tbody td.cmd { text-align:center; }
+  .row-del { border:0; background:none; color:#868e96; font-size:17px; line-height:1; cursor:pointer; padding:4px 8px; }
+  .row-del:hover { color:var(--bad); }
+
+  /* ---------- signature ---------- */
+  .sig-box { position:relative; width:300px; max-width:100%; height:104px; border:1px solid var(--border); border-radius:2px; background:#fff; touch-action:none; }
+  .sig-box canvas { display:block; width:100%; height:100%; cursor:crosshair; }
+  .sig-clear { position:absolute; top:0; right:2px; border:0; background:none; color:#adb5bd; font-size:19px; line-height:1; cursor:pointer; padding:2px 5px; }
+  .sig-clear:hover { color:#495057; }
+
+  /* ---------- footer ---------- */
+  .bottom { display:flex; align-items:center; justify-content:space-between; margin:0 4px; }
+  .btn-submit { height:35px; padding:0 15px; font:inherit; font-size:13.5px; color:#fff; background:var(--accent); border:1px solid var(--accent); border-radius:3px; cursor:pointer; }
+  .btn-submit:hover { background:#0f7ae0; border-color:#0f7ae0; }
+  .powered { display:flex; align-items:center; gap:56px; font-size:13px; font-weight:700; color:#212529; }
+  .powered .fb { height:30px; display:block; }
+
+  #result { display:none; margin:22px 4px 0; border:1px solid #b6e0c2; background:#e9f7ee; padding:14px; font-size:13px; }
+  #result pre { margin:8px 0 0; white-space:pre-wrap; word-break:break-word; font-size:12px; max-height:280px; overflow:auto; }
+
+  @media (max-width:760px) {
+    .sheet { padding:20px 14px 40px; }
+    .top { min-height:76px; } .top .logo { width:64px; height:64px; } .top h1 { font-size:23px; padding-left:70px; }
+    .row, .split-2, .split-3 { grid-template-columns:1fr; row-gap:22px; }
+    .ts { overflow-x:auto; } table { min-width:640px; }
+    .powered { gap:16px; }
+  }
+  @media print { body { border:0; } .btn-add, .row-del, .sig-clear, .btn-submit, #result { display:none !important; } }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="top">
+    <!-- SCHOOL LOGO: put your real logo file next to this page as "school-logo.png" and it is used automatically.
+         Until then a plain placeholder seal is shown. -->
+    <img class="logo" src="school-logo.png" alt="" onerror="this.replaceWith(document.getElementById('seal').content.cloneNode(true))">
+    <h1>Employee Timesheet</h1>
+  </header>
+  <template id="seal">
+    <svg class="logo" viewBox="0 0 100 100" aria-hidden="true">
+      <circle cx="50" cy="50" r="48" fill="#7b1c2c"/>
+      <circle cx="50" cy="50" r="44" fill="none" stroke="#fff" stroke-width="1.2"/>
+      <circle cx="50" cy="50" r="31" fill="#fff"/>
+      <circle cx="50" cy="50" r="28.5" fill="none" stroke="#7b1c2c" stroke-width="1"/>
+      <g fill="#fff"><circle cx="50" cy="12" r="1.6"/><circle cx="50" cy="88" r="1.6"/><circle cx="12" cy="50" r="1.6"/><circle cx="88" cy="50" r="1.6"/>
+        <circle cx="23" cy="23" r="1.2"/><circle cx="77" cy="23" r="1.2"/><circle cx="23" cy="77" r="1.2"/><circle cx="77" cy="77" r="1.2"/></g>
+      <text x="50" y="66" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="46" font-weight="700" fill="#7b1c2c">R</text>
+    </svg>
+  </template>
+
+  <!-- Set "action" to the address that should receive the data. While it is "#", Submit shows the collected values on this page. -->
+  <form id="timesheet" action="#" method="post" novalidate>
+
+    <div class="panel">
+      <div class="row one">
+        <div class="field">
+          <label class="req" for="name">Name</label>
+          <input id="name" name="name" type="text" maxlength="120" required autocomplete="name">
+          <div class="error">This field is required.</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label class="req" for="department">Department</label>
+          <!-- data-code fills "Department Code". Replace these options with your real departments. -->
+          <div class="dd"><select id="department" name="department" required>
+            <option value=""></option>
+            <option data-code="ADM-100">Administration</option>
+            <option data-code="CUS-200">Custodial</option>
+            <option data-code="FDS-300">Food Services</option>
+            <option data-code="SPE-400">Special Education</option>
+            <option data-code="TRN-500">Transportation</option>
+          </select></div>
+          <div class="error">This field is required.</div>
+        </div>
+        <div class="field">
+          <label for="department_code">Department Code</label>
+          <input id="department_code" name="department_code" type="text" readonly tabindex="-1">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="phone">Phone Number</label>
+          <div class="phone">
+            <div class="cc">
+              <select id="phone_country" name="phone_country" aria-label="Country code">
+                <option value="+1" data-flag="us">United States +1</option>
+                <option value="+1" data-flag="ca">Canada +1</option>
+                <option value="+52" data-flag="mx">Mexico +52</option>
+                <option value="+44" data-flag="gb">United Kingdom +44</option>
+              </select>
+              <svg class="flag" id="flag" viewBox="0 0 21 14" aria-hidden="true"></svg>
+            </div>
+            <div class="num"><span class="dial" id="dial">+1</span><input id="phone" name="phone_number" type="tel" inputmode="tel" maxlength="20" autocomplete="tel-national"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="req" for="email">Email Address</label>
+          <input id="email" name="email" type="email" placeholder="username@domain.com" required autocomplete="email">
+          <div class="error">Enter a valid email address.</div>
+        </div>
+      </div>
+
+      <div class="row one">
+        <div class="field">
+          <span class="label">Timesheet</span>
+          <div class="ts">
+            <div class="ts-toolbar"><button type="button" class="btn-add" id="add-row"><span class="plus">+</span>Add new record</button></div>
+            <table aria-label="Timesheet records">
+              <colgroup><col style="width:17.5%"><col style="width:16.5%"><col style="width:16.5%"><col style="width:15.5%"><col style="width:19.5%"><col><col style="width:17px"></colgroup>
+              <thead><tr><th class="menu">Date</th><th class="menu">School</th><th class="menu">Time In</th><th class="menu">Time Out</th><th class="menu">Worked Hours</th><th class="cmd"></th><th class="gutter"></th></tr></thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="split-2">
+          <div class="field">
+            <label for="job_description">Job Description</label>
+            <!-- data-account fills "Account". Replace with your real job descriptions. -->
+            <div class="dd"><select id="job_description" name="job_description">
+              <option value=""></option>
+              <option data-account="1100-210">Substitute Teacher</option>
+              <option data-account="1100-220">Teaching Assistant</option>
+              <option data-account="2600-310">Custodian</option>
+              <option data-account="2700-410">Bus Driver</option>
+              <option data-account="3100-510">Cafeteria Aide</option>
+            </select></div>
+          </div>
+          <div class="field"><label for="account">Account</label><input id="account" name="account" readonly tabindex="-1"></div>
+        </div>
+        <div class="split-3">
+          <div class="field"><label for="total_hours">Total Hours</label><input id="total_hours" name="total_hours" value="0" readonly tabindex="-1"></div>
+          <div class="field"><label for="regular_hours">Regular Hours</label><input id="regular_hours" name="regular_hours" value="0" readonly tabindex="-1"></div>
+          <div class="field"><label for="overtime_hours">Over Time Hours</label><input id="overtime_hours" name="overtime_hours" value="0" readonly tabindex="-1"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label class="req" for="date">Date</label>
+          <div class="date">
+            <input id="date" name="date" type="date" required>
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 0h1.5v2h5V0H12v2h2.5A1.5 1.5 0 0 1 16 3.5v11a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 0 14.5v-11A1.5 1.5 0 0 1 1.5 2H4V0zM1.5 6v8.5h13V6h-13zm2 2h2v2h-2V8zm3.5 0h2v2H7V8zm3.5 0h2v2h-2V8zm-7 3h2v2h-2v-2zm3.5 0h2v2H7v-2z"/></svg>
+          </div>
+          <div class="error">This field is required.</div>
+        </div>
+        <div class="field" id="sig-field">
+          <span class="label req">Signature</span>
+          <div class="sig-box">
+            <canvas id="sig" width="600" height="208" aria-label="Signature pad: sign with mouse, finger or pen"></canvas>
+            <button type="button" class="sig-clear" id="sig-clear" title="Clear signature" aria-label="Clear signature">&times;</button>
+          </div>
+          <input type="hidden" name="signature" id="signature">
+          <div class="error">Please sign in the box.</div>
+        </div>
+      </div>
+
+      <div class="row one">
+        <div class="field">
+          <label for="comment">Comment</label>
+          <textarea id="comment" name="comment" maxlength="2000"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <p class="section-title">Submit to:</p>
+      <div class="row">
+        <div class="field">
+          <label class="req" for="submit_school">School</label>
+          <!-- data-* fill Department / Secretary / Email. Replace with your real schools and contacts. -->
+          <div class="dd"><select id="submit_school" name="submit_school" required>
+            <option value=""></option>
+            <option data-department="Elementary" data-secretary="Secretary name 1" data-email="secretary1@example.org">School A</option>
+            <option data-department="Elementary" data-secretary="Secretary name 2" data-email="secretary2@example.org">School B</option>
+            <option data-department="Middle School" data-secretary="Secretary name 3" data-email="secretary3@example.org">School C</option>
+            <option data-department="High School" data-secretary="Secretary name 4" data-email="secretary4@example.org">School D</option>
+          </select></div>
+          <div class="error">This field is required.</div>
+        </div>
+        <div class="field"><label for="submit_department">Department</label><input id="submit_department" name="submit_department" readonly tabindex="-1"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="submit_secretary">Secretary</label><input id="submit_secretary" name="submit_secretary" readonly tabindex="-1"></div>
+        <div class="field"><label for="submit_email">Email</label><input id="submit_email" name="submit_email" type="email" readonly tabindex="-1"></div>
+      </div>
+    </div>
+
+    <footer class="bottom">
+      <button type="submit" class="btn-submit">Submit</button>
+      <div class="powered">Powered By:
+        <!-- FILEBANK LOGO: put the real file next to this page as "filebank-logo.png" and it is used automatically. -->
+        <img class="fb" src="filebank-logo.png" alt="FileBank" onerror="this.replaceWith(document.getElementById('fb-mark').content.cloneNode(true))">
+      </div>
+    </footer>
+    <template id="fb-mark">
+      <svg class="fb" viewBox="0 0 150 30" role="img" aria-label="FileBank">
+        <rect x="0.75" y="0.75" width="148.5" height="28.5" fill="#ffd400" stroke="#111" stroke-width="1.5"/>
+        <rect x="88" y="1.5" width="60.5" height="27" fill="#111"/>
+        <text x="8" y="21" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="15" fill="#111" textLength="44" lengthAdjust="spacingAndGlyphs">FILE</text>
+        <text x="93" y="21" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="15" fill="#ffd400" textLength="50" lengthAdjust="spacingAndGlyphs">BANK</text>
+        <g transform="translate(58 3)"><circle cx="12" cy="12" r="11.5" fill="#111"/><path d="M6 8h5l1.5 2H18v8H6z" fill="#ffd400"/><circle cx="12" cy="14.5" r="2" fill="#111"/></g>
+      </svg>
+    </template>
+  </form>
+
+  <div id="result" role="status"><strong>Form is valid.</strong> These are the values that would be sent:<pre id="result-json"></pre></div>
+</div>
+
+<script>
+(() => {
+  // ---- settings -----------------------------------------------------------------
+  const REGULAR_HOURS_LIMIT = 40;   // hours above this, summed over all rows, count as overtime. Change to suit your pay rules.
+  const form = document.getElementById('timesheet');
+  const $ = (id) => document.getElementById(id);
+
+  // ---- look-ups: a choice fills the read-only boxes next to it --------------------
+  const selected = (sel) => sel.options[sel.selectedIndex]?.dataset ?? {};
+  $('department').addEventListener('change', (e) => { $('department_code').value = selected(e.target).code ?? ''; });
+  $('job_description').addEventListener('change', (e) => { $('account').value = selected(e.target).account ?? ''; });
+  $('submit_school').addEventListener('change', (e) => {
+    const d = selected(e.target);
+    $('submit_department').value = d.department ?? '';
+    $('submit_secretary').value = d.secretary ?? '';
+    $('submit_email').value = d.email ?? '';
+  });
+
+  // ---- phone: flag + dial code ------------------------------------------------------
+  const FLAGS = {
+    us: '<rect width="21" height="14" fill="#b22234"/><g fill="#fff"><rect y="1.08" width="21" height="1.08"/><rect y="3.23" width="21" height="1.08"/><rect y="5.38" width="21" height="1.08"/><rect y="7.54" width="21" height="1.08"/><rect y="9.69" width="21" height="1.08"/><rect y="11.85" width="21" height="1.08"/></g><rect width="9" height="7.54" fill="#3c3b6e"/>',
+    ca: '<rect width="21" height="14" fill="#fff"/><rect width="5.25" height="14" fill="#d52b1e"/><rect x="15.75" width="5.25" height="14" fill="#d52b1e"/><path d="M10.5 3l1 2 1.6-.5-.6 2.6 1.6-.3-.5 1.4-2.3 1.6.2 1.7h-2l.2-1.7-2.3-1.6-.5-1.4 1.6.3-.6-2.6 1.6.5z" fill="#d52b1e"/>',
+    mx: '<rect width="21" height="14" fill="#fff"/><rect width="7" height="14" fill="#006847"/><rect x="14" width="7" height="14" fill="#ce1126"/><circle cx="10.5" cy="7" r="1.7" fill="#a0732c"/>',
+    gb: '<rect width="21" height="14" fill="#012169"/><path d="M0 0l21 14M21 0L0 14" stroke="#fff" stroke-width="2.6"/><path d="M0 0l21 14M21 0L0 14" stroke="#c8102e" stroke-width="1.1"/><path d="M10.5 0v14M0 7h21" stroke="#fff" stroke-width="4.2"/><path d="M10.5 0v14M0 7h21" stroke="#c8102e" stroke-width="2.4"/>',
+  };
+  const syncPhone = () => { const o = $('phone_country').options[$('phone_country').selectedIndex]; $('flag').innerHTML = FLAGS[o.dataset.flag]; $('dial').textContent = o.value; $('phone').style.paddingLeft = (20 + o.value.length * 8.5) + 'px'; };
+  $('phone_country').addEventListener('change', syncPhone);
+  syncPhone();
+
+  // ---- date box stays blank (like the original) until a date is chosen --------------
+  const markDate = (el) => el.classList.toggle('has-value', !!el.value);
+  form.addEventListener('input', (e) => { if (e.target.type === 'date') markDate(e.target); });
+
+  // ---- timesheet rows --------------------------------------------------------------
+  const rows = $('rows');
+  const schools = [...$('submit_school').options].map((o) => o.textContent).filter(Boolean);
+  let nextIndex = 0;
+
+  const hoursBetween = (tin, tout) => {
+    if (!tin || !tout) return 0;
+    const [h1, m1] = tin.split(':').map(Number), [h2, m2] = tout.split(':').map(Number);
+    let mins = h2 * 60 + m2 - (h1 * 60 + m1);
+    if (mins < 0) mins += 24 * 60;            // shift runs past midnight
+    return Math.round((mins / 60) * 100) / 100;
+  };
+  const fmt = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+
+  function recalc() {
+    let total = 0;
+    rows.querySelectorAll('tr').forEach((tr) => {
+      const worked = hoursBetween(tr.querySelector('[data-f=in]').value, tr.querySelector('[data-f=out]').value);
+      tr.querySelector('[data-f=worked]').value = fmt(worked);
+      total += worked;
+    });
+    total = Math.round(total * 100) / 100;
+    $('total_hours').value = fmt(total);
+    $('regular_hours').value = fmt(Math.min(total, REGULAR_HOURS_LIMIT));
+    $('overtime_hours').value = fmt(Math.max(0, Math.round((total - REGULAR_HOURS_LIMIT) * 100) / 100));
+  }
+
+  function addRow() {
+    const i = nextIndex++;
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      `<td><input type="date" class="has-value" name="timesheet[${i}][date]" aria-label="Date" required></td>` +
+      `<td><div class="dd"><select name="timesheet[${i}][school]" aria-label="School" required><option value=""></option>${schools.map((s) => `<option>${s}</option>`).join('')}</select></div></td>` +
+      `<td><input type="time" name="timesheet[${i}][time_in]" data-f="in" aria-label="Time in" required></td>` +
+      `<td><input type="time" name="timesheet[${i}][time_out]" data-f="out" aria-label="Time out" required></td>` +
+      `<td><input name="timesheet[${i}][worked_hours]" data-f="worked" value="0" readonly tabindex="-1" aria-label="Worked hours"></td>` +
+      `<td class="cmd" colspan="2"><button type="button" class="row-del" title="Remove this record" aria-label="Remove this record">&times;</button></td>`;
+    rows.appendChild(tr);
+    tr.querySelector('input').focus();
+    recalc();
+  }
+  $('add-row').addEventListener('click', addRow);
+  rows.addEventListener('input', recalc);
+  rows.addEventListener('click', (e) => { if (e.target.closest('.row-del')) { e.target.closest('tr').remove(); recalc(); } });
+
+  // ---- signature pad ---------------------------------------------------------------
+  const canvas = $('sig'), ctx = canvas.getContext('2d');
+  let drawing = false, signed = false;
+  ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111';
+  const point = (e) => { const r = canvas.getBoundingClientRect(); return [(e.clientX - r.left) * canvas.width / r.width, (e.clientY - r.top) * canvas.height / r.height]; };
+  canvas.addEventListener('pointerdown', (e) => { drawing = true; canvas.setPointerCapture(e.pointerId); ctx.beginPath(); ctx.moveTo(...point(e)); e.preventDefault(); });
+  canvas.addEventListener('pointermove', (e) => { if (!drawing) return; ctx.lineTo(...point(e)); ctx.stroke(); signed = true; });
+  const stop = () => { if (!drawing) return; drawing = false; $('signature').value = signed ? canvas.toDataURL('image/png') : ''; if (signed) $('sig-field').classList.remove('invalid'); };
+  canvas.addEventListener('pointerup', stop); canvas.addEventListener('pointercancel', stop);
+  $('sig-clear').addEventListener('click', () => { ctx.clearRect(0, 0, canvas.width, canvas.height); signed = false; $('signature').value = ''; });
+
+  // ---- validation + submit -----------------------------------------------------------
+  const check = (el) => { const field = el.closest('.field'); if (field) field.classList.toggle('invalid', !el.checkValidity()); return el.checkValidity(); };
+  form.addEventListener('blur', (e) => { if (e.target.matches('input[required], select[required], input[type=email]')) check(e.target); }, true);
+  form.addEventListener('input', (e) => { if (e.target.closest('.field.invalid')) check(e.target); });
+
+  form.addEventListener('submit', (e) => {
+    let firstBad = null;
+    form.querySelectorAll('input, select, textarea').forEach((el) => { if (!el.readOnly && el.type !== 'hidden' && !check(el) && !firstBad) firstBad = el; });
+    $('sig-field').classList.toggle('invalid', !signed);
+    if (!signed && !firstBad) firstBad = canvas;
+    if (firstBad) { e.preventDefault(); firstBad.scrollIntoView({ block: 'center', behavior: 'smooth' }); firstBad.focus?.(); return; }
+
+    if (form.getAttribute('action') === '#') {   // no server configured yet: show what would be sent
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(form));
+      if (data.signature) data.signature = data.signature.slice(0, 40) + '… (PNG image, ' + Math.round(data.signature.length / 1024) + ' KB)';
+      $('result-json').textContent = JSON.stringify(data, null, 2);
+      $('result').style.display = 'block';
+      $('result').scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+
+  recalc();
+})();
+</script>
+</body>
+</html>

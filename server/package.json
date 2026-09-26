@@ -1,0 +1,50 @@
+{
+  "name": "approvalflow-server",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "migrate": "tsx src/db/migrate.ts",
+    "seed:tenant": "tsx src/scripts/seed-tenant.ts",
+    "seed:platform-admin": "tsx src/scripts/seed-platform-admin.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "seed:demo": "tsx src/scripts/seed-demo.ts",
+    "demo:walkthrough": "tsx src/scripts/demo-walkthrough.ts",
+    "grant-role": "tsx src/scripts/grant-role.ts",
+    "sample:lookups": "tsx src/scripts/sample-lookups.ts",
+    "sample:lookup-form": "tsx src/scripts/sample-lookup-form.ts",
+    "sample:forms": "tsx src/scripts/sample-forms.ts"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^18.0.1",
+    "exceljs": "^4.4.0",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "msnodesqlv8": "^5.5.0",
+    "mssql": "^12.7.2",
+    "node-html-parser": "^9.0.4",
+    "nodemailer": "^10.0.10",
+    "pdfkit": "^0.20.2",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/mssql": "^12.3.0",
+    "@types/node": "^26.6.2",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pdfkit": "^0.17.6",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.2.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}

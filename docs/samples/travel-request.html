@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Travel Request Form</title>
+  <style>body { font-family: sans-serif; max-width: 640px; margin: 2rem auto; } label { display: block; margin-top: 1rem; }</style>
+  <script>console.log('scripts in an imported file are ignored');</script>
+</head>
+<body>
+  <!-- Sample for Admin > Forms > Import an HTML form -->
+  <form action="/submit-travel" method="post" enctype="multipart/form-data">
+    <h1>Travel Request</h1>
+    <p>Request approval for business travel before booking anything.</p>
+
+    <label for="traveller">Traveller name *</label>
+    <input id="traveller" name="traveller_name" type="text" maxlength="120" required>
+
+    <label for="mail">Contact email</label>
+    <input id="mail" name="contact_email" type="email" required>
+
+    <label>Destination <input name="destination" type="text" required placeholder="City, country"></label>
+
+    <label for="from">Departure date</label>
+    <input id="from" name="departure_date" type="date" required>
+    <label for="to">Return date</label>
+    <input id="to" name="return_date" type="date">
+
+    <label for="cost">Estimated total cost</label>
+    <input id="cost" name="estimated_cost" type="number" step="0.01" min="0" max="50000" required>
+
+    <label for="nights">Number of nights</label>
+    <input id="nights" name="nights" type="number" min="0" max="60">
+
+    <label for="dept">Department</label>
+    <select id="dept" name="department" required>
+      <option value="">-- choose --</option>
+      <option value="sales">Sales</option>
+      <option value="eng">Engineering</option>
+      <option value="ops">Operations</option>
+    </select>
+
+    <fieldset>
+      <legend>Travel class</legend>
+      <label><input type="radio" name="travel_class" value="economy" required> Economy</label>
+      <label><input type="radio" name="travel_class" value="premium"> Premium economy</label>
+      <label><input type="radio" name="travel_class" value="business"> Business</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Extras needed</legend>
+      <label><input type="checkbox" name="extras" value="hotel"> Hotel</label>
+      <label><input type="checkbox" name="extras" value="car"> Rental car</label>
+    </fieldset>
+
+    <label for="why">Business justification</label>
+    <textarea id="why" name="justification" rows="4" maxlength="2000" required></textarea>
+
+    <label for="po">Cost code</label>
+    <input id="po" name="cost_code" type="text" pattern="[A-Z]{2}-\d{4}" title="Two letters, a dash, four digits">
+
+    <label><input type="checkbox" name="policy_ack" required> I have read the travel policy</label>
+
+    <label for="itinerary">Attach itinerary</label>
+    <input id="itinerary" name="itinerary" type="file">
+
+    <input type="hidden" name="csrf" value="abc123">
+    <button type="submit">Send</button>
+  </form>
+</body>
+</html>

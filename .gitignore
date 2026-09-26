@@ -1,0 +1,15 @@
+node_modules/
+dist/
+
+# secrets and local data - never commit (server/.gitignore covers these too)
+.env
+storage/
+storage-test/
+*.bak
+
+# build and editor leftovers
+*.log
+*.tsbuildinfo
+
+# per-machine Claude Code settings; .claude/launch.json is shared
+.claude/settings.local.json
