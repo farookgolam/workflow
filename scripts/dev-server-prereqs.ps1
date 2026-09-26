@@ -38,25 +38,31 @@ function Find-Odbc { Get-OdbcDriver -Platform '64-bit' | Where-Object Name -matc
 "== 1. SQL Server 2022 Developer =="
 if (Get-Service MSSQLSERVER -ErrorAction SilentlyContinue) { "  default instance MSSQLSERVER already installed - kept" }
 else {
-  $ssei  = Get-Signed 'https://go.microsoft.com/fwlink/p/?linkid=2215158' 'SQL2022-SSEI-Dev.exe'
-  $media = Join-Path $tmp 'sqlmedia'; New-Item -ItemType Directory -Force $media | Out-Null
-  "  downloading the installation media (about 1.1 GB, several minutes)"
-  $p = Start-Process $ssei -ArgumentList '/ACTION=Download', "/MEDIAPATH=`"$media`"", '/MEDIATYPE=CAB', '/QUIET' -Wait -PassThru
-  if ($p.ExitCode -ne 0) { throw "SQL media download failed (exit code $($p.ExitCode))" }
-  $pkg = Get-ChildItem $media -Filter 'SQLServer2022-*.exe' | Select-Object -First 1
-  if (-not $pkg) { throw "no SQLServer2022-*.exe found in $media after the download" }
-  $sig = Get-AuthenticodeSignature $pkg.FullName
-  if ($sig.Status -ne 'Valid') { throw "$($pkg.Name) signature is $($sig.Status) - not running it" }
-  $src = Join-Path $media 'setup'
-  "  extracting $($pkg.Name)"
-  $p = Start-Process $pkg.FullName -ArgumentList '/q', "/x:`"$src`"" -Wait -PassThru
-  if ($p.ExitCode -ne 0) { throw "extracting SQL media failed (exit code $($p.ExitCode))" }
-  "  installing the database engine (10-20 minutes)"
+  # The full Developer ISO from download.microsoft.com (the small SSEI downloader is retired: "no longer supported")
+  $isoUrl  = 'https://download.microsoft.com/download/3/8/d/38de7036-2433-4207-8eae-06e247e17b25/SQLServer2022-x64-ENU-Dev.iso'
+  $isoSize = 1163053056
+  $iso     = Join-Path $tmp 'SQLServer2022-x64-ENU-Dev.iso'
+  if ((Test-Path $iso) -and (Get-Item $iso).Length -eq $isoSize) { "  installation disk already downloaded" }
+  else {
+    "  downloading the installation disk (1.1 GB, about 5-15 minutes)"
+    try { Start-BitsTransfer -Source $isoUrl -Destination $iso -Priority Foreground }
+    catch { "  BITS unavailable ($($_.Exception.Message)) - using a plain download"; Invoke-WebRequest -UseBasicParsing $isoUrl -OutFile $iso }
+    if ((Get-Item $iso).Length -ne $isoSize) { Remove-Item $iso; throw 'the SQL Server download is incomplete - run the script again' }
+  }
   $me = "$env:USERDOMAIN\$env:USERNAME"
   $setupArgs = '/Q', '/ACTION=Install', '/FEATURES=SQLENGINE', '/INSTANCENAME=MSSQLSERVER',
                "/SQLSYSADMINACCOUNTS=`"$me`" `"BUILTIN\Administrators`"", '/SQLSVCSTARTUPTYPE=Automatic',
-               '/TCPENABLED=0', '/UPDATEENABLED=False', '/IACCEPTSQLSERVERLICENSETERMS', '/SUPPRESSPRIVACYSTATEMENTNOTICE'
-  $p = Start-Process (Join-Path $src 'setup.exe') -ArgumentList $setupArgs -Wait -PassThru
+               '/TCPENABLED=0', '/UPDATEENABLED=False', '/IACCEPTSQLSERVERLICENSETERMS'
+  Mount-DiskImage -ImagePath $iso | Out-Null
+  try {
+    $drive = (Get-DiskImage -ImagePath $iso | Get-Volume).DriveLetter
+    $setup = "${drive}:\setup.exe"
+    $sig = Get-AuthenticodeSignature $setup
+    if ($sig.Status -ne 'Valid') { throw "setup.exe on the SQL disk has signature $($sig.Status) - not running it" }
+    "  installing the database engine from ${drive}: (10-20 minutes, little output)"
+    $p = Start-Process $setup -ArgumentList $setupArgs -Wait -PassThru
+  }
+  finally { Dismount-DiskImage -ImagePath $iso | Out-Null }
   if ($p.ExitCode -notin 0, 3010) {
     throw "SQL Server setup failed (exit code $($p.ExitCode)) - see C:\Program Files\Microsoft SQL Server\160\Setup Bootstrap\Log\Summary.txt"
   }
