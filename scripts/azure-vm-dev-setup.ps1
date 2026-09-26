@@ -3,7 +3,8 @@
 #   powershell -ExecutionPolicy Bypass -File azure-vm-dev-setup.ps1
 #
 #   Git for Windows (latest, if missing) -> clone into C:\dev\approvalflow (a GitHub sign-in window appears once)
-#   -> database ApprovalFlow_Dev restored from the rehearsal backup -> server\.env on port 4200 (the installed
+#   -> database ApprovalFlow_Dev restored from the rehearsal backup (or, without one, created fresh and seeded
+#   with a global admin, a 'demo' customer and demo users) -> server\.env on port 4200 (the installed
 #   service owns 4100) and client\.env.local pointing the UI's proxy at it -> npm ci + migrate
 #   -> Claude Code's notes about this project copied from the PC.
 # Safe to re-run: existing clone, database and .env files are kept.
@@ -13,6 +14,7 @@ param(
   [string]$BackupFile = 'C:\apps\ApprovalFlow.bak',
   [string]$DevDb      = 'ApprovalFlow_Dev',
   [int]$DevApiPort    = 4200,
+  [string]$AdminEmail = 'admin@filebankinc.com',   # global administrator, only used for a fresh database
   [string]$PcMemory   = '\\tsclient\C\Users\Administrator\.claude\projects\C--Claude-Learning-Claude-Code-WF\memory'
 )
 
@@ -50,9 +52,13 @@ else {
 }
 
 "== 3. Dev database $DevDb =="
+$freshDb = $false
 if ((Sql "SELECT COUNT(*) FROM sys.databases WHERE name = '$DevDb'").Trim() -ne '0') { "  already exists - kept" }
+elseif (-not (Test-Path $BackupFile)) {
+  $freshDb = $true
+  "  no backup at $BackupFile - a fresh database will be created by the migrations and filled with demo data (step 5)"
+}
 else {
-  if (-not (Test-Path $BackupFile)) { throw "backup not found: $BackupFile" }
   $dataPath = (Sql "SELECT CAST(SERVERPROPERTY('InstanceDefaultDataPath') AS nvarchar(400))").Trim()
   $logPath  = (Sql "SELECT CAST(SERVERPROPERTY('InstanceDefaultLogPath') AS nvarchar(400))").Trim()
   Sql "RESTORE DATABASE [$DevDb] FROM DISK = N'$BackupFile' WITH CHECKSUM, MOVE 'ApprovalFlow' TO N'${dataPath}$DevDb.mdf', MOVE 'ApprovalFlow_log' TO N'${logPath}${DevDb}_log.ldf'" | Out-Null
@@ -78,7 +84,15 @@ if (Test-Path $clientEnv) { "  client\.env.local exists - kept" }
 else { "API_TARGET=http://localhost:$DevApiPort" | Set-Content $clientEnv -Encoding ascii; "  client\.env.local written (UI proxies to $DevApiPort)" }
 
 "== 5. Libraries and migrations =="
-Push-Location (Join-Path $DevRoot 'server'); Invoke-Npm ci --no-audit --no-fund; Invoke-Npm run --silent migrate; Pop-Location
+Push-Location (Join-Path $DevRoot 'server'); Invoke-Npm ci --no-audit --no-fund; Invoke-Npm run --silent migrate
+if ($freshDb) {
+  # the generated password keys are printed once below - note them
+  "  seeding: global administrator $AdminEmail, customer 'demo' with its administrator, demo users and a sample form"
+  Invoke-Npm run --silent seed:platform-admin '--' --email $AdminEmail --displayName 'Global Admin'
+  Invoke-Npm run --silent seed:tenant '--' --slug demo --name 'Demo Co' --email admin@demo.test --displayName 'Demo Admin'
+  Invoke-Npm run --silent seed:demo
+}
+Pop-Location
 Push-Location (Join-Path $DevRoot 'client'); Invoke-Npm ci --no-audit --no-fund; Pop-Location
 
 "== 6. Claude Code project notes =="

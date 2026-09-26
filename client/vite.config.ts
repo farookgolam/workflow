@@ -1,13 +1,25 @@
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
+
+// The dev server's copy of web.config rule 2: /global and everything under it is the global console.
+// Without it the dev server falls back to index.html and /global shows the customer portal.
+const globalConsole = (): Plugin => ({
+  name: 'global-console',
+  configureServer(server) {
+    server.middlewares.use((req, _res, next) => {
+      if (req.url && /^\/global(\/|\?|$)/.test(req.url) && !req.url.startsWith('/global.html')) req.url = '/global.html';
+      next();
+    });
+  },
+});
 
 // In development the API runs on :4100; proxying keeps the browser same-origin so the
 // httpOnly SameSite=Strict refresh cookie works exactly as it will behind IIS.
 // API_TARGET (in client/.env.local or the environment) points the proxy elsewhere, e.g. on a machine
 // where the installed service already owns :4100.
 export default defineConfig(({ mode }) => ({
-  plugins: [react()],
+  plugins: [react(), globalConsole()],
   // Two entry points: the customer portal (index.html) and the global management console
   // (global.html), which IIS serves at /global. They share styles but never share a session.
   build: {
