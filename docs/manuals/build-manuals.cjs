@@ -1,5 +1,6 @@
 // Builds the PDF manuals from the content files in this folder.
-//   node docs/manuals/build-manuals.cjs
+//   node docs/manuals/build-manuals.cjs            (the three in-app manuals)
+//   node docs/manuals/build-manuals.cjs release    (only content-release.cjs: the release process guide)
 // Uses the pdfkit already installed for the server. Text supports **bold**. Block types:
 //   h1 (starts a new page, appears in the contents), h2, p, ul, ol, note {kind: note|important|tip}, table {head, rows, widths}
 const fs = require('node:fs');
@@ -147,7 +148,9 @@ function render(manual, outFile, tocPageNumbers) {
 }
 
 (async () => {
-  for (const name of ['user', 'admin', 'global']) {
+  // node build-manuals.cjs release  builds only content-release.cjs; no names = the three in-app manuals
+  const names = process.argv.slice(2);
+  for (const name of names.length ? names : ['user', 'admin', 'global']) {
     const manual = require(`./content-${name}.cjs`);
     const out = path.join(__dirname, manual.file);
     const first = await render(manual, out, null); // pass 1 finds the chapter page numbers
