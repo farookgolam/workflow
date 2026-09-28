@@ -165,7 +165,7 @@ function FileStorage({ tenant, reload }: { tenant: TenantSummary; reload(): void
         <label htmlFor="cfolder">Folder for this customer's files</label>
         <input id="cfolder" className="mono" value={folder} placeholder="D:\CustomerFiles\Acme  or  \\fileserver\approvals\Acme" onChange={(e) => setFolder(e.target.value)} />
         <p className="hint">
-          Files are saved there only, one sub-folder per request, and the app refuses any file changed outside it. The account the app runs as needs Modify permission on the folder; it is checked when you save.
+          Files are saved there only, in one sub-folder per day (the day each request was submitted, e.g. 2026-09-28), and the app refuses any file changed outside it. The account the app runs as needs Modify permission on the folder; it is checked when you save.
           Changing this affects new files only - files already saved stay where they are.
         </p>
       </div>

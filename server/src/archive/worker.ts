@@ -12,7 +12,7 @@ import path from 'node:path';
 import { audit, systemActor } from '../audit/audit';
 import { config } from '../config';
 import { tenantQuery, unscopedQuery, withTx, type Tx } from '../db/query';
-import { fileRootFor, readCustomerFile, removeCustomerFile, writeCustomerFile } from '../customer-files/files';
+import { dayFolder, fileRootFor, readCustomerFile, removeCustomerFile, writeCustomerFile } from '../customer-files/files';
 import { loadRequestDetail } from '../workflow/read';
 import { archiveFileName, buildRequestPdf, type AuditRow } from './pdf';
 
@@ -71,7 +71,7 @@ async function generatePdf(c: Candidate): Promise<void> {
 
   // in the customer's folder if it has one: written first, and removed again if the database part fails
   const root = await fileRootFor(c.TenantId);
-  const onDisk = root ? await writeCustomerFile(root, [detail.requestNumber], fileName, pdf) : null;
+  const onDisk = root ? await writeCustomerFile(root, [dayFolder(detail.submittedAt)], fileName, pdf) : null;
   try {
     await withTx(async (tx) => {
       await storeDocument(c.TenantId, c.RequestId, fileName, pdf, sha, tx, onDisk?.filePath ?? null);

@@ -4,6 +4,7 @@ import path from 'node:path';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { processArchive } from '../src/archive/worker';
+import { dayFolder } from '../src/customer-files/files';
 import { closePool } from '../src/db/pool';
 import { tenantQuery, unscopedQuery } from '../src/db/query';
 import { purgeDueTenants } from '../src/platform/purge';
@@ -65,27 +66,31 @@ describe("a customer's own file folder", () => {
     const requestNumber: string = sub.body.requestNumber;
     const [step] = await tenantQuery<{ RequestStepId: number }>(c.tenantId, 'SELECT RequestStepId FROM RequestSteps WHERE TenantId = @TenantId AND RequestId = @R', { R: requestId });
 
-    // an attachment goes to <folder>\<request>\Step 1 attachments\
+    // every file of a request goes in the folder of the day it was submitted: <folder>\2026-09-28\
+    const [{ SubmittedAt }] = await tenantQuery<{ SubmittedAt: Date }>(c.tenantId, 'SELECT SubmittedAt FROM Requests WHERE TenantId = @TenantId AND RequestId = @R', { R: requestId });
+    const day = path.join(folder, dayFolder(SubmittedAt));
+    expect(path.basename(day)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     const up = await request(app).post(`${api}/approvals/${step.RequestStepId}/attachments?name=quote.pdf`).set(bearer(c.ann)).set('Content-Type', 'application/octet-stream').send(PDF);
     expect(up.status).toBe(201);
-    const attachmentFile = path.join(folder, requestNumber, 'Step 1 attachments', 'quote.pdf');
+    const attachmentFile = path.join(day, `${requestNumber}_Step-1_quote.pdf`);
     expect(fs.readFileSync(attachmentFile).equals(PDF)).toBe(true);
     const [att] = await tenantQuery<{ HasContent: number; FilePath: string }>(c.tenantId, 'SELECT CASE WHEN Content IS NULL THEN 0 ELSE 1 END AS HasContent, FilePath FROM StepAttachments WHERE TenantId = @TenantId AND AttachmentId = @Id', { Id: up.body.attachment.attachmentId });
     expect(att).toEqual({ HasContent: 0, FilePath: attachmentFile });
 
     // a second file of the same name does not overwrite the first; removing it deletes its file
     const again = await request(app).post(`${api}/approvals/${step.RequestStepId}/attachments?name=quote.pdf`).set(bearer(c.ann)).set('Content-Type', 'application/octet-stream').send(PDF);
-    const second = path.join(folder, requestNumber, 'Step 1 attachments', 'quote (2).pdf');
+    const second = path.join(day, `${requestNumber}_Step-1_quote (2).pdf`);
     expect(fs.existsSync(second)).toBe(true);
     expect((await request(app).delete(`${api}/approvals/${step.RequestStepId}/attachments/${again.body.attachment.attachmentId}`).set(bearer(c.ann))).status).toBe(204);
     expect(fs.existsSync(second)).toBe(false);
 
-    // approve, then the archive worker writes the PDF into the request's folder, not the database
-    expect((await request(app).post(`${api}/approvals/${step.RequestStepId}/decision`).set(bearer(c.ann)).send({ decision: 'approve' })).status).toBe(200);
+    // approve, then the archive worker writes the PDF into the same day's folder, not the database
+    expect((await request(app).post(`${api}/approvals/${step.RequestStepId}/decision`).set(bearer(c.ann)).send({ decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } })).status).toBe(200);
     await processArchive({ tenantId: c.tenantId });
     const [doc] = await tenantQuery<{ HasContent: number; FilePath: string }>(c.tenantId, 'SELECT CASE WHEN Content IS NULL THEN 0 ELSE 1 END AS HasContent, FilePath FROM RequestDocuments WHERE TenantId = @TenantId AND RequestId = @R', { R: requestId });
     expect(doc.HasContent).toBe(0);
-    expect(path.dirname(doc.FilePath)).toBe(path.join(folder, requestNumber));
+    expect(path.dirname(doc.FilePath)).toBe(day);
+    expect(path.basename(doc.FilePath)).toContain(requestNumber);
     expect(fs.readFileSync(doc.FilePath).subarray(0, 4).toString()).toBe('%PDF');
 
     const pdf = await binary(request(app).get(`${api}/my/requests/${requestId}/pdf`).set(bearer(c.sam)));
@@ -126,7 +131,8 @@ describe("a customer's own file folder", () => {
     const sub = await request(app).post(`${api}/forms/${c.formId}/requests`).set(bearer(c.sam)).send({ values: { title: 'Chair' } });
     const [step] = await tenantQuery<{ RequestStepId: number }>(c.tenantId, 'SELECT RequestStepId FROM RequestSteps WHERE TenantId = @TenantId AND RequestId = @R', { R: sub.body.requestId });
     await request(app).post(`${api}/approvals/${step.RequestStepId}/attachments?name=a.pdf`).set(bearer(c.ann)).set('Content-Type', 'application/octet-stream').send(PDF);
-    const written = path.join(folder, sub.body.requestNumber, 'Step 1 attachments', 'a.pdf');
+    const [{ SubmittedAt }] = await tenantQuery<{ SubmittedAt: Date }>(c.tenantId, 'SELECT SubmittedAt FROM Requests WHERE TenantId = @TenantId AND RequestId = @R', { R: sub.body.requestId });
+    const written = path.join(folder, dayFolder(SubmittedAt), `${sub.body.requestNumber}_Step-1_a.pdf`);
     expect(fs.existsSync(written)).toBe(true);
 
     await asGlobal('patch', `/tenants/${c.tenantId}`).send({ isActive: false });
@@ -135,7 +141,7 @@ describe("a customer's own file folder", () => {
     expect(await purgeDueTenants()).toContain(c.tenantId);
 
     expect(fs.existsSync(written)).toBe(false);
-    expect(fs.existsSync(path.join(folder, sub.body.requestNumber))).toBe(false); // its emptied folders too
+    expect(fs.existsSync(path.dirname(written))).toBe(false); // its emptied day folder too
     expect(fs.readFileSync(path.join(folder, 'not-ours.txt'), 'utf8')).toBe('keep me');
   });
 });

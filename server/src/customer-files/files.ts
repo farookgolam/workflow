@@ -1,8 +1,8 @@
 // A customer's own file folder (Tenants.FileStorageRoot, migration 025).
 //
 // When a global administrator sets one, that customer's new closed-request PDFs and approvers' attachments are
-// written there as ordinary files - one sub-folder per request - and the database keeps only the path and the
-// file's SHA-256. Reading always checks the fingerprint: a file changed or damaged outside the app is refused.
+// written there as ordinary files - one sub-folder per day, the day the request was submitted, holding every file of
+// the requests submitted that day - and the database keeps only the path and the file's SHA-256. Reading always checks the fingerprint: a file changed or damaged outside the app is refused.
 // The Windows account the app runs as needs Modify permission on the folder (and the share, for a UNC path).
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -40,6 +40,15 @@ export async function checkFileRoot(input: string): Promise<string> {
     throw bad(`The app cannot write to that folder (${(e as NodeJS.ErrnoException).code ?? (e as Error).message}). Check it exists or can be created, and that the account the app runs as has Modify permission on it.`);
   }
   return root;
+}
+
+/**
+ * The folder for the requests submitted on a day: 2026-09-28. The day is the server's own (its Windows time zone),
+ * so a request submitted late in the evening is not filed under the next day.
+ */
+export function dayFolder(submittedAt: Date): string {
+  const d = new Date(submittedAt);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /** A file or folder name Windows accepts, from any text. */

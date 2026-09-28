@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { actorFrom, audit } from '../audit/audit';
 import { tenantQuery, withTx, type Tx } from '../db/query';
 import { AppError } from '../http/errors';
-import { fileRootFor, readCustomerFile, removeCustomerFile, writeCustomerFile } from '../customer-files/files';
+import { dayFolder, fileRootFor, readCustomerFile, removeCustomerFile, writeCustomerFile } from '../customer-files/files';
 import { idParam } from '../workflow/routes';
 
 export const ATTACHMENT_LIMITS = { bytes: 10 * 1024 * 1024, perStep: 10 };
@@ -98,14 +98,15 @@ approverAttachmentsRouter.post('/:requestStepId/attachments', rawFile, async (re
   const root = await fileRootFor(u.tenantId);
   let onDisk: { filePath: string; sha: Buffer } | null = null;
   if (root) {
-    const [where] = await tenantQuery<{ RequestNumber: string; StepOrder: number }>(
+    const [where] = await tenantQuery<{ RequestNumber: string; SubmittedAt: Date; StepOrder: number }>(
       u.tenantId,
-      `SELECT r.RequestNumber, rs.StepOrder FROM RequestSteps rs JOIN Requests r ON r.TenantId = rs.TenantId AND r.RequestId = rs.RequestId
+      `SELECT r.RequestNumber, r.SubmittedAt, rs.StepOrder FROM RequestSteps rs JOIN Requests r ON r.TenantId = rs.TenantId AND r.RequestId = rs.RequestId
         WHERE rs.TenantId = @TenantId AND rs.RequestStepId = @RequestStepId`,
       { RequestStepId: requestStepId },
     );
     if (!where) throw new AppError(404, 'not_found', 'Approval step not found');
-    onDisk = await writeCustomerFile(root, [where.RequestNumber, `Step ${where.StepOrder} attachments`], fileName, content);
+    // in the folder of the day the request was submitted, beside its PDF; the name says whose it is
+    onDisk = await writeCustomerFile(root, [dayFolder(where.SubmittedAt)], `${where.RequestNumber}_Step-${where.StepOrder}_${fileName}`, content);
   }
 
   let attachmentId: number;
