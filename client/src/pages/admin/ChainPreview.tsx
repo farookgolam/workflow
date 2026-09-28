@@ -7,6 +7,7 @@ import { ApiError, api } from '../../api';
 import { useAuth } from '../../auth';
 import { NextApproverPicker, needsChoice, optionId, type ApproverOption, type StepHandOff } from '../../approvers';
 import { StatusBadge, ValueList, type FieldDef } from '../../fields';
+import { SignatureImage, SignaturePad } from '../../sigpad';
 import { type UserRow } from '../../hooks';
 import { FormPreview, fieldProblems, type StoredValue } from './FormBuilder';
 
@@ -38,7 +39,7 @@ function timetable(s: StepDef, users: UserRow[]): string {
   return parts.join(' ') || 'No reminders or escalation: it waits until the approver acts.';
 }
 
-interface Decision { stepOrder: number; name: string; decision: 'Approved' | 'Rejected'; actedBy: string; comments: string; reason?: string }
+interface Decision { stepOrder: number; name: string; decision: 'Approved' | 'Rejected'; actedBy: string; comments: string; signature?: string; reason?: string }
 type HandOffState = { step: StepHandOff } | { error: string } | null;
 
 /** Loads who the step `next` (0-based) could go to, as the person handing on with `excludeUserIds` would see it. */
@@ -84,13 +85,15 @@ export function ChainPreview({ steps, fields, users, startAt, onStage }: { steps
   const [trail, setTrail] = useState<Decision[]>([]);
   const [choice, setChoice] = useState<string | null>(null);
   const [comments, setComments] = useState('');
+  const [signature, setSignature] = useState(''); // every approver signs to approve
+  const [sigError, setSigError] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
 
   const goTo = (n: number) => {
     setStageRaw(n); onStage(n);
-    setChoice(null); setComments(''); setRejecting(false); setReason(''); setError('');
+    setChoice(null); setComments(''); setSignature(''); setSigError(false); setRejecting(false); setReason(''); setError('');
     setTrail((t) => t.filter((d) => d.stepOrder < n)); // jumping back forgets the decisions from there on
   };
   useEffect(() => { goTo(Math.min(startAt, total)); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [startAt]);
@@ -116,11 +119,13 @@ export function ChainPreview({ steps, fields, users, startAt, onStage }: { steps
     if (nextIndex !== null) setReceivers((r) => { const n = [...r]; n[nextIndex] = to; return n; });
   };
   const approve = () => {
-    if (!current || !handOn()) return;
-    setTrail((t) => [...t.filter((d) => d.stepOrder < stage), { stepOrder: stage, name: stepName(current, stage - 1), decision: 'Approved', actedBy: actor?.displayName ?? 'The approver', comments: comments.trim() }]);
+    if (!current) return;
+    if (!signature) return setSigError(true);
+    if (!handOn()) return;
+    setTrail((t) => [...t.filter((d) => d.stepOrder < stage), { stepOrder: stage, name: stepName(current, stage - 1), decision: 'Approved', actedBy: actor?.displayName ?? 'The approver', comments: comments.trim(), signature }]);
     passOn();
     const n = stage + 1;
-    setStageRaw(n); onStage(n); setChoice(null); setComments(''); setError('');
+    setStageRaw(n); onStage(n); setChoice(null); setComments(''); setSignature(''); setError('');
   };
   const reject = () => {
     if (!current) return;
@@ -205,6 +210,7 @@ export function ChainPreview({ steps, fields, users, startAt, onStage }: { steps
                   <div className="prev-head"><strong>Step {p.stepOrder}: {p.name}</strong><StatusBadge status={p.decision} /></div>
                   <p className="muted small">{p.actedBy}</p>
                   {p.comments && <blockquote>{p.comments}</blockquote>}
+                  {p.signature && <SignatureImage value={p.signature} label={`Signature of ${p.actedBy}`} />}
                 </div>
               ))}
             </section>
@@ -227,6 +233,7 @@ export function ChainPreview({ steps, fields, users, startAt, onStage }: { steps
               </div>
             ) : (
               <>
+                <div className="field"><label htmlFor="pv-signature">Signature<em className="req"> *</em></label><SignaturePad id="pv-signature" label="Signature" value={signature} invalid={sigError} onChange={(v) => { setSignature(v); setSigError(false); }} />{sigError && <p className="field-error" role="alert">Sign to approve.</p>}<p className="hint">Every approver signs to approve; rejecting needs no signature.</p></div>
                 {nextIndex !== null && <HandOff state={handOff} stepIndex={nextIndex} total={total} value={choice} error={error} when="as soon as they approve" onChange={(v) => { setChoice(v); setError(''); }} />}
                 {nextIndex === null && error && <p className="field-error" role="alert">{error}</p>}
                 <div className="actions">

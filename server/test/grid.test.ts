@@ -112,7 +112,7 @@ describe('data grid control', () => {
     const [step] = await tenantQuery<{ RequestStepId: number }>(t.tenantId, 'SELECT RequestStepId FROM RequestSteps WHERE TenantId = @TenantId AND RequestId = @R', { R: res.body.requestId });
     const page = (await request(app).get(`${api}/approvals/${step.RequestStepId}`).set(bearer(tok.ann))).body;
     expect(page.submission.find((f: { key: string }) => f.key === 'items')).toMatchObject({ type: 'grid', value: stored.Value });
-    await request(app).post(`${api}/approvals/${step.RequestStepId}/decision`).set(bearer(tok.ann)).send({ decision: 'approve' });
+    await request(app).post(`${api}/approvals/${step.RequestStepId}/decision`).set(bearer(tok.ann)).send({ decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } });
     const done = await processArchive({ tenantId: t.tenantId });
     expect(done.generated).toBe(1);
   });

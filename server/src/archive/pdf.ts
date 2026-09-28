@@ -182,6 +182,7 @@ export function buildRequestPdf(d: RequestDetail, auditRows: AuditRow[]): Promis
     if (s.actedIp) row('IP address', s.actedIp);
     fields(s.responses);
     if (s.comments) row('Comments', s.comments);
+    if (s.signature) drawnSignature({ key: 'signature', label: 'Signature', type: 'sigpad', value: s.signature });
     if (s.status === 'Rejected') row('Rejection reason', d.rejectionReason ?? '-', { color: COLORS.rejected });
     doc.moveDown(0.5);
   }

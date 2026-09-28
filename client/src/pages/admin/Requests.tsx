@@ -4,6 +4,7 @@ import { api, download } from '../../api';
 import { AttachmentList, type Attachment } from '../../attachments';
 import { StatusBadge, ValueList, fmtDateTime, type FieldValue } from '../../fields';
 import { useAction, useLoad, type FormRow, type UserRow } from '../../hooks';
+import { SignatureImage } from '../../sigpad';
 
 /** What each archive state means, for the request page. */
 const ARCHIVE_LABEL: Record<string, string> = {
@@ -78,7 +79,7 @@ export function AdminRequests() {
   );
 }
 
-interface Step { requestStepId: number; stepOrder: number; name: string; status: string; assignedUserId: number; assignedTo: string; delegateUserId: number | null; activatedAt: string | null; dueAt: string | null; actedAt: string | null; actedBy: string | null; actedIp: string | null; comments: string | null; responses: FieldValue[]; attachments: Attachment[] }
+interface Step { requestStepId: number; stepOrder: number; name: string; status: string; assignedUserId: number; assignedTo: string; delegateUserId: number | null; activatedAt: string | null; dueAt: string | null; actedAt: string | null; actedBy: string | null; actedIp: string | null; comments: string | null; signature: string | null; responses: FieldValue[]; attachments: Attachment[] }
 interface Detail {
   request: { requestId: number; requestNumber: string; formName: string; status: string; totalSteps: number; submitterName: string; submittedAt: string; closedAt: string | null; rejectionReason: string | null; cancelReason: string | null; data: FieldValue[]; steps: Step[] };
   archive: { status: string; pdfAvailable: boolean; pdfBytes: number | null; pdfInFolder?: boolean };
@@ -158,6 +159,7 @@ export function AdminRequestDetail() {
               </p>
               {s.responses.length > 0 && <ValueList items={s.responses} />}
               {s.comments && <blockquote>{s.comments}</blockquote>}
+              {s.signature && <SignatureImage value={s.signature} label={`Signature of ${s.actedBy}`} />}
               <AttachmentList items={s.attachments ?? []} pathOf={(a) => `/admin/requests/${r.requestId}/attachments/${a.attachmentId}`} />
               {open && (s.status === 'Active' || s.status === 'Waiting') && (
                 reassign?.stepId === s.requestStepId ? (

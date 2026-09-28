@@ -42,8 +42,8 @@ describe('dashboard and request list', () => {
     const b = await submit('Beta conference', 'sue');
     const c = await submit('Gamma offsite');
     await decide('ann', b.steps[0], { decision: 'reject', rejectionReason: 'Too busy' });
-    await decide('ann', c.steps[0], { decision: 'approve' });
-    await decide('bob', c.steps[1], { decision: 'approve' });
+    await decide('ann', c.steps[0], { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } });
+    await decide('bob', c.steps[1], { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } });
     // make A overdue
     await tenantQuery(t.tenantId, 'UPDATE RequestSteps SET DueAt = DATEADD(DAY, -1, SYSUTCDATETIME()) WHERE TenantId = @TenantId AND RequestStepId = @S', { S: a.steps[0] });
 
@@ -68,7 +68,7 @@ describe('dashboard and request list', () => {
 
   it('request detail shows the full timeline: steps, entered data, audit trail and emails', async () => {
     const { requestId, steps } = await submit('Delta timeline');
-    await decide('ann', steps[0], { decision: 'approve', comments: 'ok' });
+    await decide('ann', steps[0], { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, comments: 'ok' });
     const d = (await admin('get', `/requests/${requestId}`)).body;
     expect(d.request.steps.map((s: { status: string }) => s.status)).toEqual(['Approved', 'Active']);
     expect(d.request.steps[0]).toMatchObject({ actedBy: 'ANN', comments: 'ok' });
@@ -88,8 +88,8 @@ describe('admin actions', () => {
 
     expect((await resolve('ann', oldToken)).status).toBe(403);
     expect((await resolve('cat', await latestToken(steps[0], 'cat@ad.test'))).body).toEqual({ requestStepId: steps[0] });
-    expect((await decide('ann', steps[0], { decision: 'approve' })).status).toBe(404);
-    expect((await decide('cat', steps[0], { decision: 'approve' })).status).toBe(200);
+    expect((await decide('ann', steps[0], { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } })).status).toBe(404);
+    expect((await decide('cat', steps[0], { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } })).status).toBe(200);
 
     // completed steps can never be reassigned
     expect((await admin('post', `/requests/${requestId}/reassign`).send({ requestStepId: steps[0], newUserId: ids.ann })).status).toBe(409);
@@ -99,7 +99,7 @@ describe('admin actions', () => {
     const { requestId, steps } = await submit('Delegate me');
     expect((await admin('post', `/requests/${requestId}/reassign`).send({ requestStepId: steps[0], newUserId: ids.cat, asDelegate: true })).status).toBe(204);
     expect((await resolve('ann', await latestToken(steps[0], 'ann@ad.test'))).status).toBe(200); // original link still valid
-    expect((await decide('cat', steps[0], { decision: 'approve' })).status).toBe(200);
+    expect((await decide('cat', steps[0], { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } })).status).toBe(200);
     const d = (await admin('get', `/requests/${requestId}`)).body;
     expect(d.request.steps[0]).toMatchObject({ assignedTo: 'ANN', actedBy: 'CAT' });
     expect(d.audit.find((a: { action: string }) => a.action === 'step.approved').detail.asDelegate).toBe(true);

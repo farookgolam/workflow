@@ -84,7 +84,7 @@ describe('approver page', () => {
     expect((await get('cat', `/approvals/${steps[0]}`)).status).toBe(404);
     expect((await get('sam', `/approvals/${steps[0]}`)).status).toBe(403);
 
-    await decide('ann', steps[0], { decision: 'approve', comments: 'Client asked for this' });
+    await decide('ann', steps[0], { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, comments: 'Client asked for this' });
     await recordStepAnswers(t.tenantId, steps[0], [{ key: 'costCode', label: 'Cost code', type: 'text', value: 'TR-1' }]); // answered under an older chain
 
     const p2 = (await get('bob', `/approvals/${steps[1]}`)).body;

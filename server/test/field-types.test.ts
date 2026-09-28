@@ -162,6 +162,6 @@ describe('modern control types', () => {
     const [step] = await tenantQuery<{ RequestStepId: number }>(t.tenantId, 'SELECT RequestStepId FROM RequestSteps WHERE TenantId = @TenantId AND RequestId = @R', { R: body.requestId });
     const page = (await request(app).get(`${api}/approvals/${step.RequestStepId}`).set(bearer(tok.ann))).body;
     expect(page.submission.find((f: { key: string }) => f.key === 'extras')).toMatchObject({ type: 'multiselect', value: '["Hotel","Visa"]' });
-    expect((await request(app).post(`${api}/approvals/${step.RequestStepId}/decision`).set(bearer(tok.ann)).send({ decision: 'approve' })).body.requestStatus).toBe('Approved');
+    expect((await request(app).post(`${api}/approvals/${step.RequestStepId}/decision`).set(bearer(tok.ann)).send({ decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } })).body.requestStatus).toBe('Approved');
   });
 });

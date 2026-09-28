@@ -31,12 +31,12 @@ async function main() {
       urgent: true,
     });
     const steps = await tenantQuery<{ RequestStepId: number }>(t, 'SELECT RequestStepId FROM RequestSteps WHERE TenantId = @TenantId AND RequestId = @R ORDER BY StepOrder', { R: requestId });
-    await decideStep(t, actor(users.manager.userId), users.manager, steps[0].RequestStepId, { decision: 'approve', comments: 'Team has needed this for a while.' });
+    await decideStep(t, actor(users.manager.userId), users.manager, steps[0].RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, comments: 'Team has needed this for a while.' });
     if (rejectAtFinance) {
       await decideStep(t, actor(users.finance.userId), users.finance, steps[1].RequestStepId, { decision: 'reject', comments: 'See reason.', rejectionReason: 'Hardware budget for Q4 is exhausted. Please resubmit in January.' });
     } else {
-      await decideStep(t, actor(users.finance.userId), users.finance, steps[1].RequestStepId, { decision: 'approve' });
-      await decideStep(t, actor(users.director.userId), users.director, steps[2].RequestStepId, { decision: 'approve', comments: 'Approved.' });
+      await decideStep(t, actor(users.finance.userId), users.finance, steps[1].RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } });
+      await decideStep(t, actor(users.director.userId), users.director, steps[2].RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, comments: 'Approved.' });
     }
     console.log(`${requestNumber}: ${rejectAtFinance ? 'rejected at step 2' : 'fully approved'}`);
   };

@@ -22,9 +22,9 @@ async function closedRequest(outcome: 'approve' | 'reject') {
   const res = await request(app).post(`${api}/forms/${formId}/requests`).set(bearer(tok.sam)).send({ values: { title: 'Ünïcode & <tags> "quoted"' } });
   const requestId: number = res.body.requestId;
   const steps = await tenantQuery<{ RequestStepId: number }>(t.tenantId, 'SELECT RequestStepId FROM RequestSteps WHERE TenantId = @TenantId AND RequestId = @R ORDER BY StepOrder', { R: requestId });
-  await decide('ann', steps[0].RequestStepId, { decision: 'approve', comments: 'Looks right' });
+  await decide('ann', steps[0].RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, comments: 'Looks right' });
   await recordStepAnswers(t.tenantId, steps[0].RequestStepId, [{ key: 'costCode', label: 'Cost code', type: 'text', value: 'CC-1' }]); // an older chain's approver section, still printed
-  await decide('bob', steps[1].RequestStepId, outcome === 'approve' ? { decision: 'approve' } : { decision: 'reject', rejectionReason: 'Not this quarter' });
+  await decide('bob', steps[1].RequestStepId, outcome === 'approve' ? { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } } : { decision: 'reject', rejectionReason: 'Not this quarter' });
   return requestId;
 }
 const archiveRow = async (requestId: number) =>

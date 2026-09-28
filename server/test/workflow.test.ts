@@ -104,10 +104,10 @@ describe('approval path', () => {
     const [s1, s2, s3] = await stepsOf(body.requestId);
 
     // wrong person, wrong order
-    expect((await decide('bob', s1.RequestStepId, { decision: 'approve' })).status).toBe(404);
-    expect((await decide('bob', s2.RequestStepId, { decision: 'approve' })).body.error.code).toBe('step_not_active');
+    expect((await decide('bob', s1.RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } })).status).toBe(404);
+    expect((await decide('bob', s2.RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } })).body.error.code).toBe('step_not_active');
 
-    const a1 = await decide('ann', s1.RequestStepId, { decision: 'approve', comments: 'Fine by me' });
+    const a1 = await decide('ann', s1.RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, comments: 'Fine by me' });
     expect(a1.body).toEqual({ requestStatus: 'InProgress', nextStepOrder: 2 });
 
     // a step cannot be acted on twice
@@ -115,8 +115,8 @@ describe('approval path', () => {
     expect(again.status).toBe(409);
     expect(again.body.error.code).toBe('step_already_decided');
 
-    expect((await decide('bob', s2.RequestStepId, { decision: 'approve' })).body.nextStepOrder).toBe(3);
-    const last = await decide('cat', s3.RequestStepId, { decision: 'approve' });
+    expect((await decide('bob', s2.RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } })).body.nextStepOrder).toBe(3);
+    const last = await decide('cat', s3.RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } });
     expect(last.body).toEqual({ requestStatus: 'Approved', nextStepOrder: null });
 
     expect(await mailTypes(body.requestId)).toEqual([
@@ -143,7 +143,7 @@ describe('approval path', () => {
     const { body } = await submit();
     const [s1] = await stepsOf(body.requestId);
     const results = await Promise.all([
-      decide('ann', s1.RequestStepId, { decision: 'approve' }),
+      decide('ann', s1.RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } }),
       decide('ann', s1.RequestStepId, { decision: 'reject', rejectionReason: 'No budget' }),
     ]);
     expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
@@ -152,12 +152,12 @@ describe('approval path', () => {
   it('honours the emailed link token only for its own user and step', async () => {
     const { body } = await submit();
     const [s1] = await stepsOf(body.requestId);
-    const bad = await decide('ann', s1.RequestStepId, { decision: 'approve', token: 'x'.repeat(43) });
+    const bad = await decide('ann', s1.RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, token: 'x'.repeat(43) });
     expect(bad.status).toBe(403);
     const [mail] = await tenantQuery<{ BodyHtml: string }>(
       t.tenantId, `SELECT BodyHtml FROM Notifications WHERE TenantId = @TenantId AND RequestId = @R AND Type = 'ApprovalRequested'`, { R: body.requestId });
     const token = /token=([\w-]+)/.exec(mail.BodyHtml)![1];
-    expect((await decide('ann', s1.RequestStepId, { decision: 'approve', token })).status).toBe(200);
+    expect((await decide('ann', s1.RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, token })).status).toBe(200);
     const [row] = await tenantQuery<{ Consumed: number }>(
       t.tenantId, 'SELECT CASE WHEN ConsumedAt IS NULL THEN 0 ELSE 1 END AS Consumed FROM ApprovalTokens WHERE TenantId = @TenantId AND RequestStepId = @S', { S: s1.RequestStepId });
     expect(row.Consumed).toBe(1);
@@ -168,7 +168,7 @@ describe('rejection', () => {
   it('requires a reason, stops the workflow, and is final', async () => {
     const { body } = await submit();
     const [s1, s2, s3] = await stepsOf(body.requestId);
-    await decide('ann', s1.RequestStepId, { decision: 'approve' });
+    await decide('ann', s1.RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } });
     await recordStepAnswers(t.tenantId, s1.RequestStepId, [{ key: 'costCode', label: 'Cost code', type: 'text', value: 'AB-1234' }]); // answered under an older chain
 
     const noReason = await decide('bob', s2.RequestStepId, { decision: 'reject', rejectionReason: '   ' });
@@ -189,7 +189,7 @@ describe('rejection', () => {
     expect(mail.BodyHtml).toContain('BOB');
 
     // cannot be resumed by anyone, through the API or straight in the database
-    expect((await decide('cat', s3.RequestStepId, { decision: 'approve' })).body.error.code).toBe('request_closed');
+    expect((await decide('cat', s3.RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } })).body.error.code).toBe('request_closed');
     expect((await request(app).post(`${api}/admin/requests/${body.requestId}/cancel`).set(bearer(tok.admin)).send({ reason: 'x' })).status).toBe(409);
     await expect(unscopedQuery(`UPDATE Requests SET Status = 'InProgress', CurrentStepOrder = 2 WHERE RequestId = @R`, { R: body.requestId })).rejects.toThrow(/final/);
     await expect(unscopedQuery(`UPDATE RequestSteps SET Status = 'Active' WHERE RequestStepId = @S`, { S: s2.RequestStepId })).rejects.toThrow(/cannot be modified/);
@@ -215,7 +215,7 @@ describe('admin cancel and chain versioning', () => {
     expect((await request(app).post(`${api}/admin/requests/${body.requestId}/cancel`).set(bearer(tok.sam)).send({ reason: 'x' })).status).toBe(403);
     expect((await request(app).post(`${api}/admin/requests/${body.requestId}/cancel`).set(bearer(tok.admin)).send({ reason: 'Duplicate' })).status).toBe(204);
     expect((await stepsOf(body.requestId)).map((s) => s.Status)).toEqual(['Cancelled', 'Cancelled', 'Cancelled']);
-    expect((await decide('ann', s1.RequestStepId, { decision: 'approve' })).status).toBe(409);
+    expect((await decide('ann', s1.RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } })).status).toBe(409);
     expect(await mailTypes(body.requestId)).toContain('Cancelled>sam');
   });
 
@@ -229,7 +229,7 @@ describe('admin cancel and chain versioning', () => {
     expect(await stepsOf(after.body.requestId)).toHaveLength(1);
 
     const [only] = await stepsOf(after.body.requestId);
-    expect((await decide('cat', only.RequestStepId, { decision: 'approve' })).body.requestStatus).toBe('Approved');
+    expect((await decide('cat', only.RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } })).body.requestStatus).toBe('Approved');
   });
 
   it("rejects a chain that names another tenant's user or a non-approver", async () => {
@@ -269,8 +269,8 @@ describe('approvers fill in no controls', () => {
     expect(page.step).toMatchObject({ canAct: true });
     expect(page.step).not.toHaveProperty('fields');
 
-    expect((await decide('ann', s1.RequestStepId, { decision: 'approve', fields: { x: 1 } })).status).toBe(400);
+    expect((await decide('ann', s1.RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, fields: { x: 1 } })).status).toBe(400);
     expect((await stepsOf(res.body.requestId))[0].Status).toBe('Active');
-    expect((await decide('ann', s1.RequestStepId, { decision: 'approve', fields: {} })).body.requestStatus).toBe('Approved');
+    expect((await decide('ann', s1.RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, fields: {} })).body.requestStatus).toBe('Approved');
   });
 });

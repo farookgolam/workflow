@@ -32,7 +32,7 @@ async function timesheet(who: 'sam' | 'kim', rows: Record<string, string>[], app
   expect(res.status).toBe(201);
   if (approve) {
     const [step] = await tenantQuery<{ RequestStepId: number }>(t.tenantId, 'SELECT RequestStepId FROM RequestSteps WHERE TenantId = @TenantId AND RequestId = @R', { R: res.body.requestId });
-    expect((await request(app).post(`${api}/approvals/${step.RequestStepId}/decision`).set(bearer(tok.ann)).send({ decision: 'approve' })).status).toBe(200);
+    expect((await request(app).post(`${api}/approvals/${step.RequestStepId}/decision`).set(bearer(tok.ann)).send({ decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } })).status).toBe(200);
   }
 }
 

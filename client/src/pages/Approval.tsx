@@ -4,6 +4,7 @@ import { ApiError, api, download } from '../api';
 import { NextApproverPicker, choicePayload, needsChoice, type StepHandOff } from '../approvers';
 import { AttachmentList, AttachmentUploader, type Attachment } from '../attachments';
 import { StatusBadge, ValueList, fmtDateTime, type FieldValue } from '../fields';
+import { SignatureImage, SignaturePad } from '../sigpad';
 
 /** Landing point of the emailed link: /approve?token=… (already behind sign-in). */
 export function ApproveLinkPage() {
@@ -43,6 +44,7 @@ interface PreviousStep {
   comments: string | null;
   responses: FieldValue[];
   attachments: Attachment[];
+  signature: string | null;
 }
 interface ApprovalView {
   request: { requestId: number; requestNumber: string; formName: string; status: string; submitterName: string; submittedAt: string; totalSteps: number; rejectionReason: string | null; pdfAvailable: boolean };
@@ -58,7 +60,7 @@ interface ApprovalView {
     allowAttachments: boolean;
     attachments: Attachment[];
     nextStep: StepHandOff | null; // who the request goes to if this step is approved (null on the last step)
-    decided: { decision: string; actedBy: string | null; actedAt: string | null; comments: string | null; responses: FieldValue[] } | null;
+    decided: { decision: string; actedBy: string | null; actedAt: string | null; comments: string | null; responses: FieldValue[]; signature: string | null } | null;
   };
 }
 
@@ -69,6 +71,7 @@ export function ApprovalPage() {
   const [loadError, setLoadError] = useState('');
 
   const [comments, setComments] = useState('');
+  const [signature, setSignature] = useState(''); // pen strokes as JSON, '' = not signed; required to approve
   const [nextApprover, setNextApprover] = useState<string | null>(null); // who this approver picked for the next step, on a chosen step
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
@@ -93,12 +96,13 @@ export function ApprovalPage() {
     setErrors({});
     setFormError('');
     if (decision === 'reject' && !reason.trim()) return setErrors({ rejectionReason: 'A rejection reason is required' });
+    if (decision === 'approve' && !signature) return setErrors({ signature: 'Sign to approve' });
     if (decision === 'approve' && needsChoice(step.nextStep, nextApprover)) return setErrors({ nextApproverUserId: `Choose who approves "${step.nextStep!.name}".` });
     setBusy(true);
     try {
       const result = await api<{ requestStatus: string; nextStepOrder: number | null }>(`/approvals/${step.requestStepId}/decision`, {
         method: 'POST',
-        body: { decision, comments: comments.trim() || undefined, rejectionReason: decision === 'reject' ? reason.trim() : undefined, token, ...(decision === 'approve' ? choicePayload(step.nextStep, nextApprover, 'next') : {}) },
+        body: { decision, comments: comments.trim() || undefined, rejectionReason: decision === 'reject' ? reason.trim() : undefined, token, ...(decision === 'approve' ? { signature: JSON.parse(signature), ...choicePayload(step.nextStep, nextApprover, 'next') } : {}) },
       });
       setOutcome(result);
       load(); // re-read: the decision is now final and shown read-only
@@ -151,6 +155,7 @@ export function ApprovalPage() {
               <p className="muted small">{p.actedBy} · {fmtDateTime(p.actedAt)}</p>
               <ValueList items={p.responses} />
               {p.comments && <blockquote>{p.comments}</blockquote>}
+              {p.signature && <SignatureImage value={p.signature} label={`Signature of ${p.actedBy}`} />}
               <AttachmentList items={p.attachments} pathOf={(a) => `/approvals/requests/${request.requestId}/attachments/${a.attachmentId}`} />
             </div>
           ))}
@@ -165,6 +170,7 @@ export function ApprovalPage() {
             <div className="prev-head"><span className="muted">{step.decided.actedBy} · {fmtDateTime(step.decided.actedAt)}</span><StatusBadge status={step.decided.decision} /></div>
             <ValueList items={step.decided.responses} />
             {step.decided.comments && <blockquote>{step.decided.comments}</blockquote>}
+            {step.decided.signature && <SignatureImage value={step.decided.signature} label={`Signature of ${step.decided.actedBy}`} />}
             <AttachmentList items={step.attachments} pathOf={(a) => `/approvals/requests/${request.requestId}/attachments/${a.attachmentId}`} />
             {step.decided.decision === 'Rejected' && request.rejectionReason && <p><strong>Rejection reason:</strong> {request.rejectionReason}</p>}
           </>
@@ -205,6 +211,12 @@ export function ApprovalPage() {
               </div>
             ) : (
               <>
+              <div className="field">
+                <label htmlFor="signature">Your signature<em className="req"> *</em></label>
+                <SignaturePad id="signature" label="Your signature" value={signature} disabled={busy} invalid={!!errors.signature} describedBy={errors.signature ? 'signature-error' : undefined} onChange={(v) => { setSignature(v); setErrors(({ signature: _, ...rest }) => rest); }} />
+                {errors.signature && <p className="field-error" id="signature-error">{errors.signature}</p>}
+                <p className="hint">Needed to approve. Rejecting does not need a signature.</p>
+              </div>
               {step.nextStep && <NextApproverPicker id="next-approver" step={step.nextStep} totalSteps={request.totalSteps} when="as soon as you approve" value={nextApprover} error={errors.nextApprover ?? errors.nextApproverUserId ?? errors.nextApproverKey} disabled={busy} onChange={setNextApprover} />}
               <div className="actions">
                 <button type="button" className="primary" disabled={busy} onClick={() => void send('approve')}>{step.nextStep ? 'Approve and send on' : 'Approve'}</button>

@@ -30,7 +30,7 @@ async function submitAndDecide(values: Record<string, unknown>, outcome: 'approv
   if (outcome) {
     const [step] = await tenantQuery<{ RequestStepId: number }>(t.tenantId, 'SELECT RequestStepId FROM RequestSteps WHERE TenantId = @TenantId AND RequestId = @R', { R: res.body.requestId });
     const d = await request(app).post(`${api}/approvals/${step.RequestStepId}/decision`).set(bearer(tok.ann))
-      .send(outcome === 'approve' ? { decision: 'approve' } : { decision: 'reject', rejectionReason: 'No budget' });
+      .send(outcome === 'approve' ? { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } } : { decision: 'reject', rejectionReason: 'No budget' });
     expect(d.status).toBe(200);
     // approvers no longer fill in controls: report on what one entered under an older chain
     if (costCode) await recordStepAnswers(t.tenantId, step.RequestStepId, [{ key: 'costCode', label: 'Cost code', type: 'text', value: costCode }]);

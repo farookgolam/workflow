@@ -64,7 +64,7 @@ describe('deleting forms from the repository', () => {
     expect(mine).toMatchObject({ formName: 'Form used', status: 'InProgress' });
     expect((await admin('get', `/requests/${requestId}`)).body.request.formName).toBe('Form used');
     const [step] = await tenantQuery<{ RequestStepId: number }>(t.tenantId, 'SELECT RequestStepId FROM RequestSteps WHERE TenantId = @TenantId AND RequestId = @R', { R: requestId });
-    const decided = await request(app).post(`${api}/approvals/${step.RequestStepId}/decision`).set(bearer(tok.ann)).send({ decision: 'approve' });
+    const decided = await request(app).post(`${api}/approvals/${step.RequestStepId}/decision`).set(bearer(tok.ann)).send({ decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } });
     expect(decided.body.requestStatus).toBe('Approved');
 
     // the name is free again, and the deletion is audited

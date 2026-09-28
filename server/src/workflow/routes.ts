@@ -203,7 +203,7 @@ approvalsRouter.get('/:requestStepId', async (req, res) => {
     // only sections completed BEFORE this step - an approver never sees later steps
     previousSteps: detail.steps
       .filter((s) => s.stepOrder < step.stepOrder && (s.status === 'Approved' || s.status === 'Rejected'))
-      .map((s) => ({ stepOrder: s.stepOrder, name: s.name, decision: s.status, actedBy: s.actedBy, actedAt: s.actedAt, comments: s.comments, responses: s.responses, attachments: s.attachments })),
+      .map((s) => ({ stepOrder: s.stepOrder, name: s.name, decision: s.status, actedBy: s.actedBy, actedAt: s.actedAt, comments: s.comments, responses: s.responses, attachments: s.attachments, signature: s.signature })),
     step: {
       requestStepId,
       stepOrder: step.stepOrder,
@@ -217,7 +217,7 @@ approvalsRouter.get('/:requestStepId', async (req, res) => {
       // populated once decided
       // the step this one hands over to when approved (null on the last step)
       nextStep: canAct ? await nextStepHandOff(u.tenantId, detail.requestId, step.stepOrder, u.userId) : null,
-      decided: canAct || step.status === 'Waiting' ? null : { decision: step.status, actedBy: step.actedBy, actedAt: step.actedAt, comments: step.comments, responses: step.responses },
+      decided: canAct || step.status === 'Waiting' ? null : { decision: step.status, actedBy: step.actedBy, actedAt: step.actedAt, comments: step.comments, responses: step.responses, signature: step.signature },
     },
   });
 });
@@ -228,6 +228,8 @@ const decisionBody = z.object({
   fields: z.object({}, { message: 'Approvers no longer fill in controls' }).strict().optional(),
   comments: z.string().max(4000).optional(),
   rejectionReason: z.string().max(2000).optional(),
+  // pen strokes from the signature pad; required to approve (checked by decideStep)
+  signature: z.unknown().optional(),
   token: z.string().min(20).max(200).optional(),
   nextApproverUserId: z.number().int().positive().max(2147483647).optional(),
   nextApproverKey: z.string().min(1).max(400).optional(),

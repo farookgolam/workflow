@@ -113,25 +113,25 @@ describe('the submitter chooses step 1, each approver chooses the next', () => {
     const page = (await request(app).get(`${api}/approvals/${steps[0].RequestStepId}`).set(bearer(tok.sue))).body;
     expect(page.step.nextStep).toMatchObject({ name: 'Principal', mode: 'chosen', list: { name: 'Principals', columns: ['Phone'] } });
     expect(page.step.nextStep.candidates.map((c: { listKey: string; info: Record<string, string> }) => [c.listKey, c.info])).toEqual([['Hawes', { Phone: '555-1' }]]); // not herself, not a deactivated person
-    const noChoice = await decide('sue', steps[0].RequestStepId, { decision: 'approve' });
+    const noChoice = await decide('sue', steps[0].RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } });
     expect(noChoice.body.error.details).toEqual([{ path: 'nextApprover', message: 'Choose who approves "Principal"' }]);
-    expect((await decide('sue', steps[0].RequestStepId, { decision: 'approve', nextApproverKey: 'Ridge' })).body.error.details[0].message).toContain('yourself');
-    expect((await decide('sue', steps[0].RequestStepId, { decision: 'approve', nextApproverKey: 'Gone' })).body.error.details[0].message).toContain('deactivated');
-    expect((await decide('sue', steps[0].RequestStepId, { decision: 'approve', nextApproverKey: 'Hawes' })).body).toEqual({ requestStatus: 'InProgress', nextStepOrder: 2 });
+    expect((await decide('sue', steps[0].RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, nextApproverKey: 'Ridge' })).body.error.details[0].message).toContain('yourself');
+    expect((await decide('sue', steps[0].RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, nextApproverKey: 'Gone' })).body.error.details[0].message).toContain('deactivated');
+    expect((await decide('sue', steps[0].RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, nextApproverKey: 'Hawes' })).body).toEqual({ requestStatus: 'InProgress', nextStepOrder: 2 });
 
     // the principal had no Approver role: being in the Principals file gives it to her
     expect((await userByEmail('pia@ac.test')).Roles.split(',').sort()).toEqual(['Approver', 'Submitter']);
     tok.pia = (await login(t.slug, 'pia@ac.test')).body.accessToken;
     steps = await stepsOf(created.body.requestId);
     expect(steps[1]).toMatchObject({ Status: 'Active', AssignedUserId: ids.pia });
-    expect((await decide('pia', steps[1].RequestStepId, { decision: 'approve', nextApproverKey: 'Pay Clerk' })).body.nextStepOrder).toBe(3);
+    expect((await decide('pia', steps[1].RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, nextApproverKey: 'Pay Clerk' })).body.nextStepOrder).toBe(3);
 
     // the last step has nobody after it to choose
     steps = await stepsOf(created.body.requestId);
     expect(steps[2]).toMatchObject({ Status: 'Active', AssignedUserId: ids.pay });
     const lastPage = (await request(app).get(`${api}/approvals/${steps[2].RequestStepId}`).set(bearer(tok.pay))).body;
     expect(lastPage.step.nextStep).toBeNull();
-    expect((await decide('pay', steps[2].RequestStepId, { decision: 'approve' })).body.requestStatus).toBe('Approved');
+    expect((await decide('pay', steps[2].RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } })).body.requestStatus).toBe('Approved');
 
     const chosenAudit = await tenantQuery<{ DetailJson: string }>(t.tenantId, `SELECT DetailJson FROM AuditLog WHERE TenantId = @TenantId AND RequestId = @R AND Action = 'step.approver_chosen' ORDER BY AuditId`, { R: created.body.requestId });
     expect(chosenAudit.map((a) => JSON.parse(a.DetailJson)).map((d) => [d.stepOrder, d.fromList.lookup, d.fromList.key])).toEqual([[1, 'Secretaries', 'Hawes'], [2, 'Principals', 'Hawes'], [3, 'Pay', 'Pay Clerk']]);
@@ -176,9 +176,9 @@ describe('fixed steps, and steps chosen from every approver', () => {
     expect(offered).not.toContain(ids.sam); // the submitter, who is no approver anyway
     expect(offered).not.toContain(ids.dee); // deactivated
 
-    expect((await decide('fixed', first.RequestStepId, { decision: 'approve', nextApproverKey: 'Hawes' })).body.error.details[0].message).toContain('not in the list');
-    expect((await decide('fixed', first.RequestStepId, { decision: 'approve', nextApproverUserId: ids.sam })).status).toBe(400); // not an approver
-    expect((await decide('fixed', first.RequestStepId, { decision: 'approve', nextApproverUserId: ids.pay })).body.nextStepOrder).toBe(2);
+    expect((await decide('fixed', first.RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, nextApproverKey: 'Hawes' })).body.error.details[0].message).toContain('not in the list');
+    expect((await decide('fixed', first.RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, nextApproverUserId: ids.sam })).status).toBe(400); // not an approver
+    expect((await decide('fixed', first.RequestStepId, { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, nextApproverUserId: ids.pay })).body.nextStepOrder).toBe(2);
     expect((await stepsOf(created.body.requestId))[1].AssignedUserId).toBe(ids.pay);
   });
 

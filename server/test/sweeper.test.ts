@@ -61,7 +61,7 @@ describe('reminders and escalation', () => {
     // the reminder link works, and deciding ends the nagging
     const [m] = await tenantQuery<{ BodyHtml: string }>(t.tenantId, `SELECT TOP 1 BodyHtml FROM Notifications WHERE TenantId = @TenantId AND RequestId = @R AND Type = 'Reminder' ORDER BY NotificationId DESC`, { R: requestId });
     const token = /token=([\w-]+)/.exec(m.BodyHtml)![1];
-    expect((await request(app).post(`${api}/approvals/${stepId}/decision`).set(bearer(tok.ann)).send({ decision: 'approve', token })).status).toBe(200);
+    expect((await request(app).post(`${api}/approvals/${stepId}/decision`).set(bearer(tok.ann)).send({ decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, token })).status).toBe(200);
     await age(stepId, 30).catch(() => {}); // completed steps are immutable - the trigger refuses, which is fine
     expect(await sweep()).toEqual({ reminded: 0, escalated: 0 });
 

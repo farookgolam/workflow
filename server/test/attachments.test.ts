@@ -18,7 +18,7 @@ const upload = (as: string, requestStepId: number, name: string, body: Buffer) =
     .set(bearer(tok[as])).set('Content-Type', 'application/octet-stream').send(body);
 const view = (as: string, requestStepId: number) => request(app).get(`${api}/approvals/${requestStepId}`).set(bearer(tok[as]));
 const decide = (as: string, requestStepId: number) =>
-  request(app).post(`${api}/approvals/${requestStepId}/decision`).set(bearer(tok[as])).send({ decision: 'approve' });
+  request(app).post(`${api}/approvals/${requestStepId}/decision`).set(bearer(tok[as])).send({ decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } });
 const approverGet = (as: string, requestId: number, attachmentId: number) =>
   request(app).get(`${api}/approvals/requests/${requestId}/attachments/${attachmentId}`).set(bearer(tok[as]));
 

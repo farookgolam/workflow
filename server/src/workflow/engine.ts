@@ -13,6 +13,7 @@ import { hashOpaqueToken, newOpaqueToken } from '../auth/tokens';
 import { config } from '../config';
 import { tenantQuery, withTx, type Tx } from '../db/query';
 import { getFormFields } from '../forms/service';
+import { checkSignature } from '../forms/sigpad';
 import { validateValues } from '../forms/validation';
 import { AppError } from '../http/errors';
 import { resolveLookupRows } from '../lookups/service';
@@ -239,6 +240,8 @@ export interface DecisionInput {
   decision: 'approve' | 'reject';
   comments?: string;
   rejectionReason?: string;
+  /** On approve (required): the approver's drawn signature, pen strokes as from the signature pad. */
+  signature?: unknown;
   /** The emailed link token, when the approver arrived through it. Verified if present. */
   token?: string;
   /** On approve: who this approver picked for the following step; the person already assigned when omitted. */
@@ -257,6 +260,13 @@ export async function decideStep(
   const reason = input.rejectionReason?.trim() ?? '';
   if (input.decision === 'reject' && !reason) {
     throw new AppError(400, 'validation_failed', 'Invalid input', [{ path: 'rejectionReason', message: 'A rejection reason is required' }]);
+  }
+  let signature: string | null = null;
+  if (input.decision === 'approve') {
+    const sig = input.signature === undefined ? { value: null } : checkSignature(input.signature);
+    if ('error' in sig) throw new AppError(400, 'validation_failed', 'Invalid input', [{ path: 'signature', message: `Signature ${sig.error}` }]);
+    if (!sig.value) throw new AppError(400, 'validation_failed', 'Invalid input', [{ path: 'signature', message: 'Sign to approve' }]);
+    signature = sig.value;
   }
 
   return withTx(async (tx) => {
@@ -325,10 +335,10 @@ export async function decideStep(
     const [{ n }] = await tenantQuery<{ n: number }>(
       tenantId,
       `UPDATE RequestSteps
-          SET Status = @Status, ActedAt = SYSUTCDATETIME(), ActedByUserId = @UserId, ActedIp = @Ip, Comments = @Comments
+          SET Status = @Status, ActedAt = SYSUTCDATETIME(), ActedByUserId = @UserId, ActedIp = @Ip, Comments = @Comments, Signature = @Signature
         WHERE TenantId = @TenantId AND RequestStepId = @RequestStepId AND Status = 'Active';
        SELECT @@ROWCOUNT AS n;`,
-      { Status: newStepStatus, UserId: user.userId, Ip: actor.ip, Comments: input.comments?.trim() || null, RequestStepId: requestStepId },
+      { Status: newStepStatus, UserId: user.userId, Ip: actor.ip, Comments: input.comments?.trim() || null, Signature: signature, RequestStepId: requestStepId },
       tx,
     );
     if (n !== 1) throw new AppError(409, 'step_already_decided', 'This step has already been completed');

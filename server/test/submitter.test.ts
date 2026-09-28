@@ -36,7 +36,7 @@ describe('my submissions', () => {
     const inFlight = await submit('sam', 'Taxi');
     const rejected = await submit('sam', 'Champagne');
     await submit('sue', "Sue's lunch");
-    await decide('ann', rejected.steps[0], { decision: 'approve', comments: 'hmm' });
+    await decide('ann', rejected.steps[0], { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, comments: 'hmm' });
     await decide('bob', rejected.steps[1], { decision: 'reject', rejectionReason: 'Not a business expense' });
 
     const all = (await my('sam', '/requests')).body;
@@ -54,7 +54,7 @@ describe('my submissions', () => {
 
   it('detail shows decision history; approver-entered content only when the form allows it', async () => {
     const r = await submit('sam', 'Hotel');
-    await decide('ann', r.steps[0], { decision: 'approve', comments: 'between us' });
+    await decide('ann', r.steps[0], { decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] }, comments: 'between us' });
     await recordStepAnswers(t.tenantId, r.steps[0], [{ key: 'note', label: 'Internal note', type: 'text', value: 'internal only' }]); // entered under an older chain
     await decide('bob', r.steps[1], { decision: 'reject', rejectionReason: 'Over the nightly cap' });
 

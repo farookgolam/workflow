@@ -22,6 +22,8 @@ export interface StepView {
   actedBy: string | null;
   actedIp: string | null;
   comments: string | null;
+  /** The approver's drawn signature (JSON pen strokes), given on approve. Not in submitterView (it is in the PDF). */
+  signature: string | null;
   responses: FieldValue[];
   /** The approver of this step may attach documents (ApprovalSteps.AllowAttachments). */
   allowAttachments: boolean;
@@ -89,7 +91,7 @@ export async function loadRequestDetail(tenantId: number, requestId: number): Pr
     tenantId,
     `SELECT rs.RequestStepId, rs.StepId, rs.StepOrder, rs.StepName, rs.Status, rs.AssignedUserId,
             CASE WHEN rs.Status = 'Waiting' AND st.ApproverChosen = 1 THEN CASE WHEN rs.StepOrder = 1 THEN N'(chosen by the submitter)' ELSE N'(chosen by the previous approver)' END ELSE au.DisplayName END AS AssignedTo,
-            rs.DelegateUserId, rs.ActivatedAt, rs.DueAt, rs.ActedAt, bu.DisplayName AS ActedBy, rs.ActedIp, rs.Comments, st.AllowAttachments
+            rs.DelegateUserId, rs.ActivatedAt, rs.DueAt, rs.ActedAt, bu.DisplayName AS ActedBy, rs.ActedIp, rs.Comments, rs.Signature, st.AllowAttachments
        FROM RequestSteps rs
        JOIN Users au ON au.TenantId = rs.TenantId AND au.UserId = rs.AssignedUserId
        JOIN ApprovalSteps st ON st.TenantId = rs.TenantId AND st.StepId = rs.StepId
@@ -152,6 +154,7 @@ export async function loadRequestDetail(tenantId: number, requestId: number): Pr
       actedBy: s.ActedBy,
       actedIp: s.ActedIp,
       comments: s.Comments,
+      signature: s.Signature,
       responses: responses.filter((x) => x.RequestStepId === s.RequestStepId).map(fv),
       allowAttachments: !!s.AllowAttachments,
       attachments: attachments

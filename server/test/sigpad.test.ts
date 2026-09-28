@@ -37,7 +37,7 @@ describe('drawn signature control', () => {
     const page = (await request(app).get(`${api}/approvals/${step.RequestStepId}`).set(bearer(tok.ann))).body;
     expect(page.submission.find((f: { key: string }) => f.key === 'sign')).toMatchObject({ type: 'sigpad', value: stored.Value });
 
-    expect((await request(app).post(`${api}/approvals/${step.RequestStepId}/decision`).set(bearer(tok.ann)).send({ decision: 'approve' })).body.requestStatus).toBe('Approved');
+    expect((await request(app).post(`${api}/approvals/${step.RequestStepId}/decision`).set(bearer(tok.ann)).send({ decision: 'approve', signature: { strokes: [[10, 10, 90, 40]] } })).body.requestStatus).toBe('Approved');
     // an approver signature from an older chain is still drawn in the PDF
     await recordStepAnswers(t.tenantId, step.RequestStepId, [{ key: 'approverSign', label: 'Approver signature', type: 'sigpad', value: JSON.stringify({ w: 600, h: 200, strokes: [[1, 1, 100, 50]] }) }]);
     expect((await processArchive({ tenantId: t.tenantId })).generated).toBe(1);
