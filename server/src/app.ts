@@ -16,6 +16,7 @@ import { authRouter } from './auth/routes';
 import { config } from './config';
 import { unscopedQuery } from './db/query';
 import { errorHandler, notFound } from './http/errors';
+import { platformAdminsRouter } from './platform/admins.routes';
 import { platformAuthRouter } from './platform/auth.routes';
 import { requirePlatformAdmin } from './platform/identity';
 import { platformStatsRouter, platformTenantsRouter } from './platform/tenants.routes';
@@ -67,6 +68,7 @@ export function createApp() {
   api.use('/global/auth', platformAuthRouter);
   api.use('/global/tenants', requirePlatformAdmin, platformTenantsRouter);
   api.use('/global/stats', requirePlatformAdmin, platformStatsRouter);
+  api.use('/global/admins', requirePlatformAdmin, platformAdminsRouter);
   api.use('/global/help', globalHelpRouter);
   api.use('/admin', requireAuth, requireRole('Admin'));
   api.use('/admin/dashboard', dashboardRouter);

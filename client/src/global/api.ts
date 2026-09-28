@@ -60,6 +60,12 @@ export async function signIn(email: string, passwordKey: string): Promise<Platfo
   return body.admin;
 }
 
+/** Change your own key. Every other session is signed out, so this one gets a fresh token. */
+export async function changeKey(currentPassword: string, newPassword: string): Promise<void> {
+  const body = await gapi<{ accessToken: string }>('/auth/change-key', { method: 'POST', body: { currentPassword, newPassword } });
+  accessToken = body.accessToken;
+}
+
 export async function signOut(): Promise<void> {
   await gapi('/auth/logout', { method: 'POST' }).catch(() => {});
   accessToken = null;
@@ -79,6 +85,16 @@ export interface TenantSummary {
   /** Set once removed: kept (restorable) until purgeAfter, then deleted for good. */
   removedAt: string | null;
   purgeAfter: string | null;
+}
+
+export interface GlobalAdminSummary {
+  platformAdminId: number;
+  email: string;
+  displayName: string;
+  isActive: boolean;
+  locked: boolean;
+  createdAt: string;
+  lastSignInAt: string | null;
 }
 
 export interface TenantAdmin {

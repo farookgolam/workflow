@@ -5,6 +5,7 @@ import { gapi } from './api';
 import { useGlobalAuth } from './auth';
 import { Customers } from './pages/Customers';
 import { CustomerDetail } from './pages/CustomerDetail';
+import { GlobalAdmins } from './pages/GlobalAdmins';
 import { GlobalLogin } from './pages/Login';
 
 export function GlobalApp() {
@@ -18,6 +19,7 @@ export function GlobalApp() {
         <Link to="/" className="brand">Approvals · Global</Link>
         <nav className="nav" aria-label="Global management">
           <NavLink to="/" end>Customers</NavLink>
+          <NavLink to="/administrators">Administrators</NavLink>
         </nav>
         <span className="spacer" />
         <span className="help-link"><a href="#help" onClick={(e) => { e.preventDefault(); void openManual(() => gapi<{ url: string }>('/help/link', { method: 'POST' })); }}>Help</a></span>
@@ -29,6 +31,7 @@ export function GlobalApp() {
         <Routes>
           <Route path="/" element={<Customers />} />
           <Route path="/customers/:tenantId" element={<CustomerDetail />} />
+          <Route path="/administrators" element={<GlobalAdmins />} />
           <Route path="*" element={<div className="card"><h1>Page not found</h1><Link to="/">Go to the customer list</Link></div>} />
         </Routes>
       </main>

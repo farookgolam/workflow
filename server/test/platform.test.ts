@@ -357,3 +357,81 @@ describe('what the global administrator leaves behind', () => {
     expect(anywhere[0].n).toBe(0);
   });
 });
+
+describe('managing global administrators', () => {
+  it('creates another global administrator, who signs in with the key shown once', async () => {
+    const email = `${unique('newglobal')}@example.test`;
+    const created = await asGlobal('post', '/admins').send({ email: email.toUpperCase(), displayName: 'New Global' });
+    expect(created.status).toBe(201);
+    expect(created.body.admin).toMatchObject({ email, displayName: 'New Global', isActive: true });
+    expect(created.body.generatedKey).toMatch(/^\d{6}$/);
+
+    const signedIn = await platformLogin(email, created.body.generatedKey);
+    expect(signedIn.status).toBe(200);
+
+    // a global administrator, never a customer user
+    const inUsers = await unscopedQuery<{ n: number }>('SELECT COUNT(*) AS n FROM Users WHERE Email = @E', { E: email });
+    expect(inUsers[0].n).toBe(0);
+
+    const list = await asGlobal('get', '/admins');
+    expect(list.body.admins.map((a: { email: string }) => a.email)).toContain(email);
+
+    const again = await asGlobal('post', '/admins').send({ email, displayName: 'Twice' });
+    expect(again.status).toBe(409);
+    expect(again.body.error.code).toBe('email_taken');
+  });
+
+  it('deactivating ends their sessions and stops sign-in; reactivating restores it', async () => {
+    const other = await makePlatformAdmin();
+    const otherToken = (await platformLogin(other.email)).body.accessToken;
+
+    expect((await asGlobal('patch', `/admins/${other.platformAdminId}`).send({ isActive: false })).status).toBe(200);
+    expect((await request(app).get('/api/v1/global/tenants').set(bearer(otherToken))).status).toBe(401);
+    expect((await platformLogin(other.email)).status).toBe(401);
+    const open = await unscopedQuery<{ n: number }>(
+      'SELECT COUNT(*) AS n FROM PlatformRefreshTokens WHERE PlatformAdminId = @Id AND RevokedAt IS NULL',
+      { Id: other.platformAdminId },
+    );
+    expect(open[0].n).toBe(0);
+
+    expect((await asGlobal('patch', `/admins/${other.platformAdminId}`).send({ isActive: true })).status).toBe(200);
+    expect((await platformLogin(other.email)).status).toBe(200);
+  });
+
+  it('gives another administrator a new key, and the old one stops working', async () => {
+    const other = await makePlatformAdmin();
+    const reset = await asGlobal('post', `/admins/${other.platformAdminId}/reset-key`);
+    expect(reset.status).toBe(200);
+    expect(reset.body.generatedKey).toMatch(/^\d{6}$/);
+    expect((await platformLogin(other.email)).status).toBe(401);
+    expect((await platformLogin(other.email, reset.body.generatedKey)).status).toBe(200);
+  });
+
+  it('will not deactivate or reset yourself, so there is always an active administrator', async () => {
+    const self = await asGlobal('patch', `/admins/${globalAdmin.platformAdminId}`).send({ isActive: false });
+    expect(self.status).toBe(409);
+    expect(self.body.error.code).toBe('self');
+    expect((await asGlobal('post', `/admins/${globalAdmin.platformAdminId}/reset-key`)).status).toBe(409);
+  });
+
+  it('records every change in the platform audit log', async () => {
+    const email = `${unique('audited')}@example.test`;
+    const created = await asGlobal('post', '/admins').send({ email, displayName: 'Audited' });
+    const id = created.body.admin.platformAdminId;
+    await asGlobal('patch', `/admins/${id}`).send({ isActive: false });
+
+    const rows = await unscopedQuery<{ Action: string; PlatformAdminId: number }>(
+      `SELECT Action, PlatformAdminId FROM PlatformAuditLog WHERE EntityType = 'PlatformAdmin' AND EntityId = @Id ORDER BY PlatformAuditId`,
+      { Id: id },
+    );
+    expect(rows.map((r) => r.Action)).toEqual(['platform_admin.created', 'platform_admin.deactivated']);
+    expect(rows.every((r) => r.PlatformAdminId === globalAdmin.platformAdminId)).toBe(true);
+  });
+
+  it('a customer administrator cannot reach it', async () => {
+    const t = await makeTenant();
+    await makeUser(t.tenantId, 'admin@example.test', ['Admin']);
+    const customerToken = (await login(t.slug, 'admin@example.test')).body.accessToken;
+    expect((await request(app).post('/api/v1/global/admins').set(bearer(customerToken)).send({ email: 'x@example.test', displayName: 'X X' })).status).toBe(401);
+  });
+});
