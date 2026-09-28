@@ -49,6 +49,8 @@ export const chainSchema = z.object({
         reminderRepeatDays: z.number().int().min(1).max(365).nullable().default(null),
         escalateAfterDays: z.number().int().min(1).max(365).nullable().default(null),
         escalateToUserId: z.number().int().positive().nullable().default(null),
+        // the approver can attach documents (files) to their decision
+        allowAttachments: z.boolean().default(false),
         // approvers only decide and comment: a step no longer has controls of its own (older chains' answers stay readable)
         fields: z.array(z.unknown()).max(0, 'Approvers no longer fill in controls: remove the fields from this step').optional(),
       }),
@@ -224,9 +226,9 @@ export async function publishChain(
   for (const [i, s] of input.steps.entries()) {
     const [{ StepId }] = await tenantQuery<{ StepId: number }>(
       tenantId,
-      `INSERT INTO ApprovalSteps (TenantId, ChainId, StepOrder, Name, ApproverUserId, ApproverChosen, ApproverListLookupId, ApproverListEmailColumn, ApproverListNameColumn, ApproverListColumnsJson, ReminderAfterDays, ReminderRepeatDays, EscalateAfterDays, EscalateToUserId)
+      `INSERT INTO ApprovalSteps (TenantId, ChainId, StepOrder, Name, ApproverUserId, ApproverChosen, ApproverListLookupId, ApproverListEmailColumn, ApproverListNameColumn, ApproverListColumnsJson, ReminderAfterDays, ReminderRepeatDays, EscalateAfterDays, EscalateToUserId, AllowAttachments)
        OUTPUT inserted.StepId
-       VALUES (@TenantId, @ChainId, @Order, @Name, @Approver, @Chosen, @ListLookup, @ListEmail, @ListName, @ListColumns, @Remind, @Repeat, @Escalate, @EscalateTo)`,
+       VALUES (@TenantId, @ChainId, @Order, @Name, @Approver, @Chosen, @ListLookup, @ListEmail, @ListName, @ListColumns, @Remind, @Repeat, @Escalate, @EscalateTo, @Attach)`,
       {
         ChainId,
         Order: i + 1,
@@ -242,6 +244,7 @@ export async function publishChain(
         Repeat: s.reminderRepeatDays,
         Escalate: s.escalateAfterDays,
         EscalateTo: s.escalateToUserId,
+        Attach: s.allowAttachments,
       },
       tx,
     );

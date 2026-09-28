@@ -23,6 +23,20 @@ export interface StepView {
   actedIp: string | null;
   comments: string | null;
   responses: FieldValue[];
+  /** The approver of this step may attach documents (ApprovalSteps.AllowAttachments). */
+  allowAttachments: boolean;
+  /** Never shown to the submitter - see submitterView. */
+  attachments: AttachmentInfo[];
+}
+
+export interface AttachmentInfo {
+  attachmentId: number;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedBy: string;
+  uploadedByUserId: number;
+  createdAt: Date;
 }
 
 export interface RequestDetail {
@@ -75,7 +89,7 @@ export async function loadRequestDetail(tenantId: number, requestId: number): Pr
     tenantId,
     `SELECT rs.RequestStepId, rs.StepId, rs.StepOrder, rs.StepName, rs.Status, rs.AssignedUserId,
             CASE WHEN rs.Status = 'Waiting' AND st.ApproverChosen = 1 THEN CASE WHEN rs.StepOrder = 1 THEN N'(chosen by the submitter)' ELSE N'(chosen by the previous approver)' END ELSE au.DisplayName END AS AssignedTo,
-            rs.DelegateUserId, rs.ActivatedAt, rs.DueAt, rs.ActedAt, bu.DisplayName AS ActedBy, rs.ActedIp, rs.Comments
+            rs.DelegateUserId, rs.ActivatedAt, rs.DueAt, rs.ActedAt, bu.DisplayName AS ActedBy, rs.ActedIp, rs.Comments, st.AllowAttachments
        FROM RequestSteps rs
        JOIN Users au ON au.TenantId = rs.TenantId AND au.UserId = rs.AssignedUserId
        JOIN ApprovalSteps st ON st.TenantId = rs.TenantId AND st.StepId = rs.StepId
@@ -88,6 +102,13 @@ export async function loadRequestDetail(tenantId: number, requestId: number): Pr
     `SELECT sr.RequestStepId, sr.FieldKey, sr.FieldLabel, sr.FieldType, sr.Value
        FROM StepResponses sr JOIN RequestSteps rs ON rs.TenantId = sr.TenantId AND rs.RequestStepId = sr.RequestStepId
       WHERE sr.TenantId = @TenantId AND rs.RequestId = @RequestId ORDER BY sr.RequestStepId, sr.SortOrder`,
+    { RequestId: requestId },
+  );
+  const attachments = await tenantQuery<Record<string, any>>(
+    tenantId,
+    `SELECT a.AttachmentId, a.RequestStepId, a.FileName, a.ContentType, a.SizeBytes, a.UploadedByUserId, u.DisplayName AS UploadedBy, a.CreatedAt
+       FROM StepAttachments a JOIN Users u ON u.TenantId = a.TenantId AND u.UserId = a.UploadedByUserId
+      WHERE a.TenantId = @TenantId AND a.RequestId = @RequestId ORDER BY a.AttachmentId`,
     { RequestId: requestId },
   );
   const fv = (x: { FieldKey: string; FieldLabel: string; FieldType: string; Value: string | null }): FieldValue => ({
@@ -132,6 +153,18 @@ export async function loadRequestDetail(tenantId: number, requestId: number): Pr
       actedIp: s.ActedIp,
       comments: s.Comments,
       responses: responses.filter((x) => x.RequestStepId === s.RequestStepId).map(fv),
+      allowAttachments: !!s.AllowAttachments,
+      attachments: attachments
+        .filter((a) => a.RequestStepId === s.RequestStepId)
+        .map((a) => ({
+          attachmentId: Number(a.AttachmentId),
+          fileName: a.FileName,
+          contentType: a.ContentType,
+          sizeBytes: a.SizeBytes,
+          uploadedBy: a.UploadedBy,
+          uploadedByUserId: a.UploadedByUserId,
+          createdAt: a.CreatedAt,
+        })),
     })),
   };
 }

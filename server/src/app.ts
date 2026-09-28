@@ -9,6 +9,7 @@ import { adminNotificationsRouter, adminRequestListRouter, auditRouter, dashboar
 import { adminSettingsRouter } from './admin/settings.routes';
 import { adminUsersRouter } from './admin/users.routes';
 import { adminArchiveRouter, approverPdfRouter, myPdfRouter } from './archive/routes';
+import { adminAttachmentsRouter, approverAttachmentsRouter } from './attachments/routes';
 import { approvalsRouter, formsRouter, myRouter } from './workflow/routes';
 import { cleanIp } from './audit/audit';
 import { requireAuth, requireRole } from './auth/middleware';
@@ -79,12 +80,13 @@ export function createApp() {
   api.use('/admin/settings', adminSettingsRouter);
   api.use('/admin/users', adminUsersRouter);
   api.use('/admin/forms', adminFormsRouter);
+  api.use('/admin/requests', adminAttachmentsRouter);
   api.use('/admin/requests', adminRequestsRouter);
   api.use('/admin/requests', adminArchiveRouter);
   api.use('/admin/requests', adminRequestListRouter);
   api.use('/forms', requireAuth, formsRouter);
   api.use('/my', requireAuth, myRouter, myPdfRouter);
-  api.use('/approvals', requireAuth, approverPdfRouter, approvalsRouter);
+  api.use('/approvals', requireAuth, approverPdfRouter, approverAttachmentsRouter, approvalsRouter);
 
   app.use('/api/v1', api);
   app.use('/api', notFound); // unknown API paths are JSON 404s, never the SPA shell

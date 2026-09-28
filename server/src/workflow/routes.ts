@@ -203,7 +203,7 @@ approvalsRouter.get('/:requestStepId', async (req, res) => {
     // only sections completed BEFORE this step - an approver never sees later steps
     previousSteps: detail.steps
       .filter((s) => s.stepOrder < step.stepOrder && (s.status === 'Approved' || s.status === 'Rejected'))
-      .map((s) => ({ stepOrder: s.stepOrder, name: s.name, decision: s.status, actedBy: s.actedBy, actedAt: s.actedAt, comments: s.comments, responses: s.responses })),
+      .map((s) => ({ stepOrder: s.stepOrder, name: s.name, decision: s.status, actedBy: s.actedBy, actedAt: s.actedAt, comments: s.comments, responses: s.responses, attachments: s.attachments })),
     step: {
       requestStepId,
       stepOrder: step.stepOrder,
@@ -211,6 +211,9 @@ approvalsRouter.get('/:requestStepId', async (req, res) => {
       status: step.status,
       canAct,
       dueAt: step.dueAt,
+      // documents this step's approver attached; they can add and remove them only while canAct
+      allowAttachments: step.allowAttachments,
+      attachments: step.attachments,
       // populated once decided
       // the step this one hands over to when approved (null on the last step)
       nextStep: canAct ? await nextStepHandOff(u.tenantId, detail.requestId, step.stepOrder, u.userId) : null,

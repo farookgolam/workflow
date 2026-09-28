@@ -67,7 +67,7 @@ async function main() {
       },
       tx,
     );
-    const step = { chosen: null, reminderRepeatDays: null, escalateAfterDays: null, escalateToUserId: null };
+    const step = { chosen: null, reminderRepeatDays: null, escalateAfterDays: null, escalateToUserId: null, allowAttachments: false };
     await publishChain(
       tenantId,
       formId,

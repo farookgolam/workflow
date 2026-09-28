@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { ApiError, api, download } from '../api';
 import { NextApproverPicker, choicePayload, needsChoice, type StepHandOff } from '../approvers';
+import { AttachmentList, AttachmentUploader, type Attachment } from '../attachments';
 import { StatusBadge, ValueList, fmtDateTime, type FieldValue } from '../fields';
 
 /** Landing point of the emailed link: /approve?token=… (already behind sign-in). */
@@ -41,6 +42,7 @@ interface PreviousStep {
   actedAt: string | null;
   comments: string | null;
   responses: FieldValue[];
+  attachments: Attachment[];
 }
 interface ApprovalView {
   request: { requestId: number; requestNumber: string; formName: string; status: string; submitterName: string; submittedAt: string; totalSteps: number; rejectionReason: string | null; pdfAvailable: boolean };
@@ -53,6 +55,8 @@ interface ApprovalView {
     status: string;
     canAct: boolean;
     dueAt: string | null;
+    allowAttachments: boolean;
+    attachments: Attachment[];
     nextStep: StepHandOff | null; // who the request goes to if this step is approved (null on the last step)
     decided: { decision: string; actedBy: string | null; actedAt: string | null; comments: string | null; responses: FieldValue[] } | null;
   };
@@ -147,6 +151,7 @@ export function ApprovalPage() {
               <p className="muted small">{p.actedBy} · {fmtDateTime(p.actedAt)}</p>
               <ValueList items={p.responses} />
               {p.comments && <blockquote>{p.comments}</blockquote>}
+              <AttachmentList items={p.attachments} pathOf={(a) => `/approvals/requests/${request.requestId}/attachments/${a.attachmentId}`} />
             </div>
           ))}
         </section>
@@ -160,6 +165,7 @@ export function ApprovalPage() {
             <div className="prev-head"><span className="muted">{step.decided.actedBy} · {fmtDateTime(step.decided.actedAt)}</span><StatusBadge status={step.decided.decision} /></div>
             <ValueList items={step.decided.responses} />
             {step.decided.comments && <blockquote>{step.decided.comments}</blockquote>}
+            <AttachmentList items={step.attachments} pathOf={(a) => `/approvals/requests/${request.requestId}/attachments/${a.attachmentId}`} />
             {step.decided.decision === 'Rejected' && request.rejectionReason && <p><strong>Rejection reason:</strong> {request.rejectionReason}</p>}
           </>
         )}
@@ -180,6 +186,9 @@ export function ApprovalPage() {
               <label htmlFor="comments">Comments</label>
               <textarea id="comments" rows={3} maxLength={4000} value={comments} disabled={busy} onChange={(e) => setComments(e.target.value)} />
             </div>
+            {step.allowAttachments && (
+              <AttachmentUploader requestStepId={step.requestStepId} requestId={request.requestId} items={step.attachments} max={10} disabled={busy} onChange={load} />
+            )}
 
             {rejecting ? (
               <div className="reject-box">
