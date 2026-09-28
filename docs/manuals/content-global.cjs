@@ -4,14 +4,14 @@ module.exports = {
   subtitle: 'Creating and looking after the customer organisations on an installation',
   audience:
     'This manual is for the people who run an ApprovalFlow installation for more than one organisation: creating customers, giving each one its address and first administrator, suspending and restoring access, and helping a customer administrator when something goes wrong. It assumes the server is already installed - that is covered in docs/DEPLOYMENT-IIS.md. What a customer administrator does inside their own organisation is covered in the Administrator Manual.',
-  version: '1.1',
+  version: '1.2',
   date: 'September 2026',
   blocks: [
     { h1: 'Overview' },
     { p: 'One installation can host many **customers** (organisations). Each customer has its own address, its own forms, its own people and its own data; none of them can see any of the others. The **global management console** is where customers are created and looked after. It is a separate site with a separate sign-in: your account there is not a user account in any customer, and no customer administrator can see it, deactivate it or reset its key.' },
     { h2: 'The two kinds of administrator' },
     { table: { widths: [0.3, 0.7], head: ['Role', 'What it can do'], rows: [
-      ['Global administrator (you)', 'Create customers, rename them, move them to another address, suspend and restore them, remove them (with a 30-day window to restore), grant or remove the Admin role inside a customer, reset a customer administrator key, change a customer settings, and start a time-limited support session.'],
+      ['Global administrator (you)', 'Create customers, rename them, move them to another address, suspend and restore them, remove them (with a 30-day window to restore), grant or remove the Admin role inside a customer, reset a customer administrator key, change a customer settings, choose a folder of its own for a customer\'s files, start a time-limited support session, and add or deactivate other global administrators.'],
       ['Customer administrator', 'Everything inside one organisation: forms, approval chains, lookups, requests, its own users and its own settings. Nothing outside it.'],
     ] } },
     { note: 'You cannot read a customer requests, forms or documents from the console. There is no page that shows them and no setting that turns one on. When you genuinely need to see what a customer sees, use a **support session** (chapter 5), which is visible to them and recorded in their own audit log.' },
@@ -25,6 +25,7 @@ module.exports = {
       'A random 6-digit key is printed **once**. Sign in with it, then change it.',
       'Run it again with --reset-key for somebody who has lost theirs.',
     ] },
+    { p: 'After that, further global administrators are added in the console itself, on the **Administrators** page (chapter 7).' },
 
     { h1: 'The customer list' },
     { p: 'The console opens on the list of every customer on the installation. The tiles above it count active customers, people, requests in progress, and failed emails across all of them - a quick check that nothing is stuck anywhere.' },
@@ -46,6 +47,7 @@ module.exports = {
       ['Address', 'The short name their sub-site is reached at, filled in for you from the organisation name. Lowercase letters, digits and hyphens. Choose carefully: changing it later changes the address people have bookmarked.'],
       ['Full host name', 'Only if this customer is to be reached at a name of its own, such as approvals.acme.com. Leave it blank for the standard address on this installation.'],
       ['First administrator email and name', 'The person who will set the organisation up. They do not need an account yet - this creates it.'],
+      ['Folder for this customer\'s files (optional)', 'A folder on the server or a network share - D:\\CustomerFiles\\Acme or \\\\fileserver\\approvals\\Acme - where this customer\'s PDFs and approvers\' documents are saved instead of the database. Leave it blank to keep them in the database. See **File storage** in chapter 4; it can also be set later.'],
     ] } },
     { p: 'On **Create customer** the organisation, its request numbering, its settings and its first administrator are created together, in one step that either fully succeeds or does nothing at all. A **first sign-in key** is then shown:' },
     { note: 'The key is shown **once** and is not stored anywhere in readable form, so it cannot be looked up later. Pass it to that administrator through a channel you trust, not in the same email as the address. If it is lost, use **Reset key** (chapter 4) rather than creating a second customer.' },
@@ -78,11 +80,21 @@ module.exports = {
     { h2: 'Administrators' },
     { p: 'The **Administrators** section lists the people with the Admin role in that organisation, and whether each has set a password key yet.' },
     { table: { widths: [0.28, 0.72], head: ['Action', 'What happens'], rows: [
-      ['Add administrator', 'Gives the Admin role to somebody who already has an account there. It cannot create an account - people register themselves - so a brand new person must sign in once first.'],
+      ['Add administrator', 'Gives the Admin role to somebody who already has an account there. It cannot create an account, so a brand new person must first sign in once, or be added by one of the customer\'s own administrators under **Users > Add people**.'],
       ['Remove', 'Takes the Admin role away. The account itself stays, with its other roles.'],
       ['Reset key', 'Forgets that person password key. At their next sign-in they prove their email address with a code and choose a new key. You never see either key.'],
     ] } },
     { note: 'Leaving an organisation with no administrator at all locks its own people out of their configuration - they would need you to grant the role again. Check the list before removing the last one.' },
+    { h2: 'File storage' },
+    { p: 'By default a customer\'s closed-request PDFs and its approvers\' documents are kept in the database. Under **File storage** you can give it a folder of its own instead: type the path in **Folder for this customer\'s files** and choose **Use this folder**.' },
+    { ul: [
+      'Use a full path: a folder on a drive of the server (**D:\\CustomerFiles\\Acme**, not a whole drive) or a network share (**\\\\fileserver\\approvals\\Acme**). The folder is created if it does not exist.',
+      'The Windows account the app runs as needs **Modify** permission on the folder (and on the share, for a network path). The app proves it can write there before saving the setting; if it cannot, it says why and nothing changes.',
+      'Files are saved in **one sub-folder per day** - the day each request was submitted, named like 2026-09-28, by the server\'s clock. A request\'s PDF and all its documents land in the same day\'s folder. PDFs keep their usual names; documents are named after their request and step (REQ-000014_Step-1_Supplier quote.pdf). Nothing is ever overwritten.',
+      'The database keeps each file\'s path and fingerprint. A file changed or removed outside the app is refused, not shown - so back the folder up, and restore from the backup if that happens.',
+      'Changing or clearing the folder (**Keep new files in the database instead**) affects **new files only**: every file already saved stays where it is and still opens.',
+      'The customer is never shown the server path. When a removed customer is finally deleted, the files the app wrote for it are deleted too - nothing else in the folder is touched.',
+    ] },
     { h2: 'Settings' },
     { p: 'The lower half of the page is the customer **Settings** page - branding, who may register and the sender address - exactly as their own administrator sees it, and edited the same way. Use it to help somebody who is stuck; the change is recorded in their audit log with your email address beside it, so nothing you do here is invisible to them.' },
 
@@ -111,9 +123,24 @@ module.exports = {
     { table: { widths: [0.32, 0.68], head: ['Kept apart per customer', 'Shared by the installation'], rows: [
       ['Forms, requests, documents, lookups, users, audit log', 'The server itself, the database, and the mail server'],
       ['Branding, sign-up rules, sender address', 'The default values those settings fall back to'],
-      ['Archived PDFs (in the database)', 'The database they are kept in'],
+      ['Archived PDFs and approvers\' documents (in the database, or in the customer\'s own folder)', 'The database, or the server or share holding the folders'],
     ] } },
     { p: 'Separation is enforced in the database, not only in the pages: every table carries the organisation, child rows can only point at a parent in the same organisation, and any query that forgets to say which organisation it means is rejected rather than answered.' },
+
+    { h1: 'Global administrators' },
+    { p: 'The **Administrators** page, in the top bar of the console, lists everybody who can sign in to the console, and lets any global administrator look after the others.' },
+    { table: { widths: [0.3, 0.7], head: ['Action', 'What happens'], rows: [
+      ['New global administrator', 'Enter their **email address** and **name**. A 6-digit sign-in key is generated and shown **once** - pass it to them through a channel you trust. They should change it after signing in.'],
+      ['New key', 'Gives somebody who has lost their key a new generated one, shown once. Their old key stops working.'],
+      ['Deactivate', 'Blocks that person from the console at once and ends any session they have open. Their history in the activity log stays.'],
+      ['Reactivate', 'Lets a deactivated administrator sign in again.'],
+    ] } },
+    { ul: [
+      'Nobody can deactivate themselves or give themselves a new key here, so there is always at least one active global administrator.',
+      'The same page has **Change my key**, for your own key: enter the current key and the new one twice.',
+      'Every change is recorded in the global activity log with who made it.',
+    ] },
+    { note: 'A global administrator can create, change, suspend and remove every customer, and manage the other global administrators. Add only people who need that.', kind: 'important' },
 
     { h1: 'Everyday tasks' },
     { table: { widths: [0.38, 0.62], head: ['Task', 'What to do'], rows: [
@@ -126,7 +153,9 @@ module.exports = {
       ['A customer has left for good', 'Suspend it, then **Remove customer** at the bottom of its page. You can restore it for 30 days; after that everything it owns is deleted for good.'],
       ['Somebody asks what you did in their organisation', 'Their own audit log answers it: every action of yours is in there, and support-session actions are stamped as such.'],
       ['A customer wants example forms to start from', 'On the server run **npm --prefix server run sample:forms -- --tenant <address name>** (for example --tenant acme). It adds five sample forms with approval chains - Leave Request, Mileage Reimbursement, IT Access & Equipment Request, Records Retrieval Request and Secure Destruction Authorization - using that customer’s own approvers and its Departments and Schools lookup tables if it has them. A form that already exists is left alone, so it is safe to run twice. The customer needs an administrator and at least one approver first. The Administrator Manual describes the forms.'],
-      ['A new global administrator is joining', 'Run npm run seed:platform-admin on the server for them; there is no way to create one from a browser, by design.'],
+      ['A new global administrator is joining', 'On the **Administrators** page choose **New global administrator** and pass them the key shown (chapter 7).'],
+      ['A global administrator has left', 'On the **Administrators** page choose **Deactivate** beside them.'],
+      ['A customer wants its files on its own drive or share', 'Set **File storage** on its page (chapter 4) after giving the app\'s account Modify permission on the folder.'],
     ] } },
     { h2: 'Keeping your own account safe' },
     { ul: [

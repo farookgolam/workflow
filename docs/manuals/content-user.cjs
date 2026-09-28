@@ -4,7 +4,7 @@ module.exports = {
   subtitle: 'For people who submit requests and people who approve them',
   audience:
     'This manual explains how to sign in, submit a request and follow its progress, and how to review and decide on requests that are sent to you for approval. Administrators have a separate manual.',
-  version: '1.1',
+  version: '1.2',
   date: 'September 2026',
   blocks: [
     { h1: 'How the system works' },
@@ -70,7 +70,7 @@ module.exports = {
     { h1: 'Submitting a request' },
     { h2: 'Start a new request' },
     { ol: [
-      'On your home page, under **Start a new request**, click the form you need.',
+      'On your home page, under **Start a new request**, click the form you need. The page opens straight on its fields.',
       'Fill in the fields. Fields marked with a red asterisk (*) are required.',
       'Some forms ask you to choose **who approves it first**, in the **Send to** box at the bottom of the form - for example a school, shown with the secretary\'s name beside it. You must pick one before submitting. That person will be asked to approve first, so check the details before you continue. You cannot choose yourself.',
       'Choose **Submit for approval**. That person is emailed a link straight away.',
@@ -84,6 +84,7 @@ module.exports = {
       ['Tick box', 'Tick for Yes. A required tick box must be ticked.'],
       ['Lookup', 'Choose from the list (long lists let you type to search). Boxes marked **auto-filled** next to it fill in by themselves and cannot be edited.'],
       ['Email', 'A valid email address.'],
+      ['Signature', 'Sign in the box with your finger, a stylus or the mouse. **Undo** removes the last stroke and **Clear** starts again.'],
     ] } },
     { h2: 'After you submit' },
     { ul: [
@@ -115,7 +116,7 @@ module.exports = {
       'Choose **Download archived PDF** for the full record of the rejected request.',
     ] },
     { h2: 'Downloading the PDF' },
-    { p: 'When a request is Approved or Rejected, a PDF is produced within a minute or so. It contains your submission, every completed approver section with name, decision, comments and time, and an audit summary. Rejected PDFs carry a red **REJECTED** banner. If the button says the PDF is being prepared, refresh the page shortly.' },
+    { p: 'When a request is Approved or Rejected, a PDF is produced within a minute or so. It contains your submission, every completed approver section with name, decision, comments, the approver\'s **signature** and time, and an audit summary. Rejected PDFs carry a red **REJECTED** banner. If the button says the PDF is being prepared, refresh the page shortly.' },
     { h2: 'Emails you will receive' },
     { table: { widths: [0.4, 0.6], head: ['Email', 'When'], rows: [
       ['We received your ... request', 'Immediately after you submit.'],
@@ -139,19 +140,29 @@ module.exports = {
     { h2: 'The approval page' },
     { table: { widths: [0.3, 0.7], head: ['Section', 'Contents'], rows: [
       ['Original submission', 'Everything the submitter entered. **Read-only.**'],
-      ['Previous approvals', 'Each earlier step: approver, decision, date and their comments (and, on older requests, any fields they completed). **Read-only.** Not shown on Step 1. You never see later steps.'],
-      ['Your section', 'A **Comments** box, the **Send to** box when you choose the next approver, and the **Approve** and **Reject...** buttons. Highlighted with a blue outline.'],
+      ['Previous approvals', 'Each earlier step: approver, decision, date, their comments, their **signature** and any documents they attached (and, on older requests, any fields they completed). **Read-only.** Not shown on Step 1. You never see later steps.'],
+      ['Your section', 'A **Comments** box, **Attach documents** on steps that allow it, the **Your signature** box, the **Send to** box when you choose the next approver, and the **Approve** and **Reject...** buttons. Highlighted with a blue outline.'],
     ] } },
     { h2: 'To approve' },
     { ol: [
       'Read the submission and add comments if you wish. The system records your account, the time and your IP address with your decision.',
+      'If the step allows it, attach any documents that support your decision under **Attach documents** (see below). This is optional.',
+      '**Sign** in the **Your signature** box with your finger, a stylus or the mouse. Every step needs a signature to approve; **Undo** removes the last stroke and **Clear** starts again. If you choose Approve without signing, the box turns red with **Sign to approve**.',
       'If a **Send to** box appears next to **Approve**, choose who approves the next step from its list - their details fill in beside it. You must pick someone before approving; you cannot choose yourself or the person who submitted the request. Rejecting needs no choice.',
       'Choose **Approve**. If you chose who is next, they are emailed a link straight away.',
     ] },
     { p: 'A green message confirms the result: either the request has moved to the next step, or - if yours was the last step - it is fully approved and the submitter has been notified.' },
+    { p: 'Your signature is kept with your decision. It is shown to the approvers of later steps and to administrators, and it is printed in the PDF of the request, which the submitter can also download.' },
+    { h2: 'Attaching documents' },
+    { p: 'On steps where the administrator allows it, your section has **Attach documents**. Choose **Choose Files** and pick one or more files.' },
+    { ul: [
+      'Allowed: PDF, Word, Excel, PowerPoint, text files and images, up to **10 MB** each and **10 files** per step.',
+      'Until you decide, you can **Remove** a file you attached. Once you approve or reject, the files are part of the record and cannot be changed.',
+      'Only the approvers of this request (from your step onwards) and administrators can open them. The submitter never sees them, and they are not listed in the PDF.',
+    ] },
     { h2: 'To reject' },
     { ol: [
-      'Choose **Reject...**. A red box opens.',
+      'Choose **Reject...**. A red box opens. Rejecting does not need a signature.',
       'Enter the **reason for rejection**. This is mandatory and is sent to the submitter word for word, so write it for them.',
       'Choose **Confirm rejection**, or **Back** to return without rejecting.',
     ] },
@@ -159,7 +170,7 @@ module.exports = {
     { h2: 'After the request is closed' },
     { p: 'Once a request you approved (or rejected) is finished, its approval page shows **Download PDF**: the complete record, the same one the submitter gets. Only the people who had a step in that request can download it, and each download is recorded.' },
     { h2: 'After you decide' },
-    { p: 'Your section becomes **read-only** for everyone, including you. Opening the same email link again shows your recorded decision. A step can be decided only once: if you open the request in two tabs, or a delegate has already acted, the second attempt shows "This step has already been completed".' },
+    { p: 'Your section becomes **read-only** for everyone, including you, and so do your signature and any documents you attached. Opening the same email link again shows your recorded decision. A step can be decided only once: if you open the request in two tabs, or a delegate has already acted, the second attempt shows "This step has already been completed".' },
     { h2: 'Reminders, reassignment and delegates' },
     { ul: [
       'If the form has reminder rules, you receive **"Reminder: approval needed"** emails after the configured number of days. Each contains a fresh link.',
@@ -191,7 +202,8 @@ module.exports = {
       ['This account already has a password key', 'You are already set up: sign in with your key, or use **Forgot your key?**'],
       ['This link can\'t be used', 'The approval link has expired, was replaced by a newer one, the step was reassigned, or you are signed in as a different person. Check **Waiting for my approval**, or ask an administrator for a reminder.'],
       ['This approval does not exist or is not assigned to you', 'The step belongs to someone else. Make sure you are signed in with the right account.'],
-      ['This step has already been completed', 'It was decided already (by you in another tab, or by a delegate). Refresh to see the result.'],
+      ['Sign to approve', 'Draw your signature in the **Your signature** box, then choose **Approve** again.'],
+      ['This step has already been completed','It was decided already (by you in another tab, or by a delegate). Refresh to see the result.'],
       ['This request is rejected / cancelled and can no longer be changed', 'The request closed while you had it open. No action is needed.'],
       ['Request not found', 'The request is not yours, or the number is wrong. Submitters can open only their own requests.'],
       ['The PDF has not been generated yet', 'Wait a minute and try again.'],

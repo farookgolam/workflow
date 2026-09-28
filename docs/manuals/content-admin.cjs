@@ -4,7 +4,7 @@ module.exports = {
   subtitle: 'Configuring forms, approval chains and users, and overseeing requests',
   audience:
     'This manual is for people with the Admin role. It covers the administrator portal: the dashboard, request oversight and actions, form and approval-chain configuration, reports, user management and the audit log. Server installation is covered separately in docs/DEPLOYMENT-IIS.md. Everyday submitting and approving is covered in the User Manual.',
-  version: '1.1',
+  version: '1.2',
   date: 'September 2026',
   blocks: [
     { h1: 'Overview' },
@@ -41,7 +41,7 @@ module.exports = {
     { h2: 'What administrators are responsible for' },
     { ul: [
       'Creating forms, their fields and their approval chains, and keeping approver assignments current.',
-      'Granting roles to people after they register themselves, deactivating leavers, and - rarely - resetting a password key for someone who cannot do it themselves.',
+      'Adding people (or granting roles to people after they register themselves), deactivating leavers, and - rarely - resetting a password key for someone who cannot do it themselves.',
       'Watching for **overdue** requests and unblocking them (remind, reassign, delegate).',
       'Answering audit questions using the audit log and its CSV export.',
     ] },
@@ -84,7 +84,7 @@ module.exports = {
     { h2: 'The request detail page' },
     { ul: [
       '**Actions** - the buttons described below, and the archive panel (whether the PDF is stored, and its size).',
-      '**Timeline** - the submission with all its data, then each step: status, who it is assigned to, delegate, waiting-since and due dates, and once decided: who acted, when, from which IP address, the fields they entered and their comments.',
+      '**Timeline** - the submission with all its data, then each step: status, who it is assigned to, delegate, waiting-since and due dates, and once decided: who acted, when, from which IP address, the fields they entered, their comments, their **signature** (on approved steps) and any documents they attached, which you can download.',
       '**Emails** - every notification for this request with its delivery status and any error.',
       '**Audit trail** - every event for this request with user, time and IP address.',
     ] },
@@ -242,6 +242,7 @@ module.exports = {
       ['Then repeat every (days)', 'Further reminders. Leave empty for a single reminder. At most 10 reminders are sent per step.'],
       ['Escalate after (days)', 'One escalation notice if the step is still undecided.'],
       ['Escalate to', 'Who receives the escalation. "Administrators" sends it to the organisation\'s admin notification address, or to all active admins.'],
+      ['Documents', 'Tick **Approver can attach documents** to let this step\'s approver attach files - PDF, Word, Excel, PowerPoint, text and images, up to 10 files of 10 MB. Off unless you tick it. See **Approver documents** below.'],
     ] } },
     { h2: 'Who approves each step' },
     { p: 'Every step has a **Who approves this step** box at the top. Choose one of:' },
@@ -265,7 +266,22 @@ module.exports = {
       'A file a step chooses from cannot be deleted, and **Replace data** refuses a file without the columns the step uses.',
     ] },
     { note: 'Because being in the file is what allows a person to approve, treat the file like a permission list: only administrators can import or replace lookup files, and every import is recorded in the audit log.', kind: 'important' },
-    { p: 'Approvers do not fill in controls of their own: each approver sees the submitted form and gives a **decision**, a **comment** and, when rejecting, a **reason**. Requests from before this change keep and print what their approvers filled in.' },
+    { p: 'Approvers do not fill in controls of their own: each approver sees the submitted form and gives a **decision**, a **comment**, a drawn **signature** when approving and, when rejecting, a **reason**. Requests from before this change keep and print what their approvers filled in.' },
+    { h2: 'Approver signatures' },
+    { p: 'Every step of every form asks the approver to **sign** before they can approve: a box where they draw their signature with a finger, a stylus or the mouse. There is nothing to switch on. Rejecting does not need a signature.' },
+    { ul: [
+      'The signature is saved with the decision and can never be changed afterwards, like the rest of the step.',
+      'It is shown to the approvers of later steps and to administrators (in the request **Timeline**), and printed under each step in the PDF. The submitter sees it in the PDF only.',
+      'Steps approved before signatures were introduced have none; their PDF simply leaves the line out.',
+    ] },
+    { h2: 'Approver documents' },
+    { p: 'On a step with **Approver can attach documents** ticked, the approver sees **Attach documents** in their section and can add supporting files - a quote, an invoice, a signed letter.' },
+    { ul: [
+      'PDF, Word, Excel, PowerPoint, text files and images, up to **10 MB** each and **10 files** per step. The file must really be what its name says: a renamed file of another type is refused.',
+      'The approver can remove a file until they decide. After that the files are part of the record and nobody - not even an administrator - can change or delete them.',
+      'The approvers of that request from that step onwards, and administrators, can download them. The **submitter never sees them**, and they are not listed in the PDF.',
+      'Every upload, removal and download is in the audit log (**attachment.added**, **attachment.removed**, **attachment.downloaded**).',
+    ] },
     { p: 'Use the arrows to reorder steps, the cross to remove one and **+ Add step** to append. Nothing takes effect until you choose **Publish chain**.' },
     { note: 'Publishing creates a **new version**. Requests already in progress keep the version they started with - their steps and approvers do not change. To change the approver on an in-flight request, use **Reassign** on that request.', kind: 'important' },
     { p: 'Escalation only **notifies**; it never reassigns. The recipient is given a link to the request so they can remind, reassign or delegate.' },
@@ -275,8 +291,8 @@ module.exports = {
       'Choose **Preview & test**. A row of stages appears: **Submission**, then each step by number and name, then **Approved** (or **Rejected**). Click a stage to jump to it. A step whose settings are incomplete has a dashed outline.',
       'In **Submitted by**, choose who the pretend request comes from - you, by default. It matters because nobody can choose themselves or the submitter.',
       '**Submission**: the form appears as the submitter gets it, with the **Send to** box for step 1. Fill it in, pick the step 1 approver if the step is chosen, and choose **Test submit**. The answers are checked exactly as for a real request, then the preview moves on to step 1.',
-      '**Each step**: you see the approver\'s screen - the step and who receives it, the submitted answers, the earlier decisions, and the step\'s reminder and escalation timetable in words. Add a comment, pick who approves the next step if it is chosen, and choose **Test approve and send on**. Or choose **Test reject...**, give a reason and choose **Test rejection**.',
-      'At the end a summary lists who submitted, who decided each step and with what comment, and what the submitter would have been emailed.',
+      '**Each step**: you see the approver\'s screen - the step and who receives it, the submitted answers, the earlier decisions, and the step\'s reminder and escalation timetable in words. Add a comment, draw a signature in the **Signature** box (a real approver must sign to approve, so the preview asks for one too), pick who approves the next step if it is chosen, and choose **Test approve and send on**. Or choose **Test reject...**, give a reason and choose **Test rejection**.',
+      'At the end a summary lists who submitted, who decided each step and with what comment, and what the submitter would have been emailed. Earlier steps show the pretend signature under **Previous approvals**.',
       'Choose **Edit step N in Design** (or **Back to Design**) to fix what you found, or **Start again** to clear the pretend request.',
     ] },
     { p: 'The people offered in each **Send to** box are worked out by the server, exactly as for a real request: from the step\'s lookup file, or from everyone with the Approver role, leaving out the person choosing and the submitter. If a step cannot be handed on, the preview says why - for example an approver who has been deactivated or has lost the Approver role, a lookup file that has been deleted, or a column the file no longer has. These are the same problems that would stop **Publish chain**.' },
@@ -370,10 +386,15 @@ module.exports = {
     { note: 'If someone\'s saved choice disappears from a replaced table (a school closes), existing requests are unaffected; on new requests that value is simply no longer offered.' },
 
     { h1: 'Users' },
-    { h2: 'You do not create users' },
-    { p: 'People create their own accounts. The first time someone signs in with their work email, they receive a verification code by email and choose their own **6-digit password key**. They then appear on the **Users** page with the **Submitter** role and the date they joined. You never see, set or send anyone\'s key.' },
+    { h2: 'How people get an account' },
+    { p: 'There are two ways, and you can use both:' },
     { ul: [
-      'If the server is configured with allowed email domains, only addresses at those domains can register.',
+      '**They sign in themselves.** The first time someone signs in with their work email, they receive a verification code by email and choose their own **6-digit password key**. They then appear on the **Users** page with the **Submitter** role and the date they joined.',
+      '**You add them** under **Add people** on the Users page - one at a time, or many at once from an Excel sheet - with the roles they need (see below).',
+    ] },
+    { p: 'Either way, each person chooses their own key. You never see, set or send anyone\'s key.' },
+    { ul: [
+      'If the server is configured with allowed email domains, only addresses at those domains can register or be added.',
       'The **first administrator** is created once, when the system is installed (see the deployment guide). Further administrators are ordinary users you give the Admin role to.',
     ] },
     { table: { widths: [0.2, 0.8], head: ['Role', 'Gives access to'], rows: [
@@ -381,19 +402,24 @@ module.exports = {
       ['Approver', 'Deciding steps assigned or delegated to them. Required before someone can be chosen in a chain or reassignment.'],
       ['Admin', 'The administrator portal. Admins can also be chosen as approvers.'],
     ] } },
+    { h2: 'Add people' },
+    { p: 'At the top of the **Users** page, **Add people** creates accounts for you. Tick **Email each new person how to sign in** to send each of them a welcome email with the address.' },
+    { ul: [
+      '**One person**: enter their **Email** and **Name**, tick their roles (Submitter, Approver, Admin) and choose **Add person**.',
+      '**Many people from Excel**: choose **Download template**, fill in one row per person under the headings **Email**, **Name** and **Roles** (Submitter, Approver or Admin; several separated by commas; empty means Submitter), save it and choose the file. A preview lists every row with what will happen to it - to add, already a user (skipped), or a problem such as a missing name or a domain that is not allowed (skipped). Nothing is added until you choose **Add N people**. Up to 1,000 rows per sheet.',
+    ] },
+    { p: 'New people show **No key yet** until they first sign in: they confirm their email with a code and choose their own key. Adding is recorded in the audit log as **user.created** (one person) or **users.imported** (a sheet).' },
     { h2: 'Making someone an approver' },
     { ol: [
-      'Ask the person to sign in once, so that their account exists.',
-      'On the **Users** page tick **Approver** in their row. The change is saved immediately.',
-      'They can now be selected in an approval chain (Forms) or when reassigning a step.',
+      'Add them with **Approver** ticked (above), or - if they already have an account - tick **Approver** in their row on the **Users** page. The change is saved immediately.',
+      'They can now be selected in an approval chain (Forms) or when reassigning a step, even before they have signed in for the first time.',
     ] },
-    { note: 'Someone who has never signed in cannot be chosen as an approver. When you plan a new form, ask its approvers to sign in first.', kind: 'important' },
     { h2: 'Change roles' },
     { p: 'Tick or untick the role boxes in the user\'s row; the change takes effect immediately, including for people who are signed in. A user must keep at least one role, and you cannot remove your own Admin role.' },
     { h2: 'Status column' },
     { table: { widths: [0.24, 0.76], head: ['Status', 'Meaning'], rows: [
       ['Active', 'Has a password key and can sign in.'],
-      ['No key yet', 'You reset their key and they have not created a new one yet.'],
+      ['No key yet', 'You added them, or reset their key, and they have not signed in to choose one yet.'],
       ['Locked', 'Five wrong keys in a row. Unlocks by itself after 15 minutes; a reset also clears it.'],
       ['Inactive', 'Deactivated by an administrator. Cannot sign in or register again with that address.'],
     ] } },
@@ -432,7 +458,8 @@ module.exports = {
     { h2: 'Exporting and saving' },
     { ul: [
       '**Export to Excel** gives a workbook with real numbers and dates (shown as MM/DD/YYYY, so they still sort and filter as dates), a bold header and a totals row. **Export to CSV** gives a plain file that any program can open. Every export is recorded in the audit log.',
-      'To keep a report, type a **name** and choose **Save report**. Saved reports are listed at the top of the page for every administrator; open one to run it again with today\'s data. Change it and choose **Save changes**, or **Save as a new report** to keep both.',
+      'To keep a report, type a **name** and choose **Save report**. Saved reports are listed at the top of the page for every administrator; open one to run it again with today\'s data.',
+      'To change a saved report - for example to add a column - choose **Edit** beside it in the list. The editor opens and the page scrolls to it. Choose the field under **Columns** and click **Add**, then **Save changes** at the bottom, or **Save as a new report** to keep both.',
       'Reports run when you open or run them - nothing is sent automatically.',
     ] },
     { note: 'Reports show dates as **MM/DD/YYYY** (for example 09/23/2026) and a date with a time as **MM/DD/YYYY h:mm AM/PM** (09/23/2026 2:05 PM) - on screen, in Excel and in CSV alike. Times are shown in the time zone of the computer you run or export the report on. The boxes where you choose filter dates follow your browser language, which for US English is also MM/DD/YYYY.', kind: 'tip' },
@@ -444,6 +471,7 @@ module.exports = {
       'Choose the **Submitter**, or leave **All submitters**. The list holds everyone who has submitted that form.',
       'Choose **Single day** and the day, or **Date range** and the **From** and **To** days. **This week**, **Last week**, **This month** and **Last month** fill in the range (weeks start on Monday).',
       'Only **approved** timesheets count. Tick **Also count timesheets still waiting for approval** to include those too. Rejected and cancelled timesheets never count.',
+      'Optionally, under **Extra columns from the form**, tick up to **10** fields that are filled in once per timesheet - for example **Employee ID** or **Department**. Each is shown on every line of that timesheet and in the export. Fields of the grid itself are not offered.',
       'Choose **Run report**, then **Export to Excel** or **Export to CSV** if you need a file.',
     ] },
     { table: { widths: [0.3, 0.7], head: ['Chosen', 'The result'], rows: [
@@ -453,7 +481,7 @@ module.exports = {
     { ul: [
       'Hours are shown with 2 decimals (7.50 is seven and a half hours). Each line also names its request, so you can find the timesheet it came from.',
       'Worked Hour is the value stored on the timesheet. Timesheet forms should work it out with **elapsed(timeIn, timeOut)** (see **Formulas** in the chapter **Data grids**), so that a shift past midnight - 22:00 to 06:00 - is stored as 8 hours. Timesheets submitted under an older **timeOut - timeIn** formula stored such a shift as a negative number; the report ignores a missing or negative value and works the hours out from Time In and Time Out instead.',
-      'Which column is which is guessed from the headings. If a form uses other headings, open **Columns used from ...** and choose them; your choice and the last dates you used are remembered in this browser.',
+      'Which column is which is guessed from the headings. If a form uses other headings, open **Columns used from ...** and choose them; your choice, your extra columns and the last dates you used are remembered in this browser, for each form.',
       'Dates are written **MM/DD/YYYY** on screen, in Excel and in CSV; the file name uses the same dates with underscores (Hours_-_All_submitters_-_09_01_2026_to_09_05_2026.xlsx), because a file name cannot contain slashes. The Excel file has a title line with the form, person and dates, real dates and numbers, and bold subtotal and total rows. Every export is recorded in the audit log as **report.exported**.',
     ] },
 
@@ -473,6 +501,7 @@ module.exports = {
       ['auth.key_reset_requested / auth.key_reset_self', 'A user asked for a forgotten-key code / chose a new key with it.'],
       ['request.submitted / approved / rejected / cancelled', 'Request lifecycle, with from and to states.'],
       ['step.activated / approved / rejected', 'Step lifecycle. Detail shows asDelegate, viaLink and selfApproval when they apply.'],
+      ['attachment.added / removed / downloaded', 'An approver attached or removed a document on their step, or somebody downloaded one.'],
       ['step.reassigned / step.delegated', 'Administrator changed who can act.'],
       ['step.reminder_sent / step.escalated', 'Manual or scheduled reminder; escalation (user "System" when automatic).'],
       ['approval.link_opened', 'An approver opened their emailed link.'],
@@ -483,6 +512,7 @@ module.exports = {
       ['lookup.imported / replaced / deleted', 'An Excel lookup table was imported, had its data replaced, or was deleted.'],
       ['form.created / updated / fields_updated / deleted, form.import_parsed, chain.published', 'Configuration changes (form.deleted shows whether it was removed outright or kept for its requests).'],
       ['user.updated / user.key_reset', 'An administrator changed roles or status / reset a password key.'],
+      ['user.created / users.imported', 'An administrator added one person / added people from an Excel sheet. The detail of an import gives the counts.'],
       ['notification.failed / requeued', 'An email was given up on / queued again by an admin.'],
       ['settings.updated', 'An organisation setting was changed (chapter 11). The detail lists which settings, never their values, and names a provider administrator if one made the change.'],
       ['user.impersonation_started', 'A provider global administrator started a support session as one of your administrators. The detail shows who and why.'],
@@ -492,12 +522,20 @@ module.exports = {
     { p: '**impersonatedByPlatformAdmin** in the detail of an entry means it was done during a provider support session rather than by the named person themselves (chapter 11).' },
 
     { h1: 'PDF archive' },
-    { p: 'When a request is approved or rejected, a PDF of the complete record is made and **kept in the database**. From there it can be downloaded from the request page by administrators, by the submitter, and by the approvers of that request. A stored PDF can never be changed or deleted - not even by an administrator - so it stays a faithful record of what was decided.' },
+    { p: 'When a request is approved or rejected, a PDF of the complete record, including every approver\'s **signature**, is made and **kept in the database** (or in your organisation\'s own file folder - see below). From there it can be downloaded from the request page by administrators, by the submitter, and by the approvers of that request. A stored PDF can never be changed or deleted - not even by an administrator - so it stays a faithful record of what was decided.' },
     { p: 'The PDF is made **after** the decision is saved and the submitter\'s email is queued, so it never delays notifications. There is nothing to set up: every organisation\'s PDFs are kept this way. To take PDFs elsewhere, download them from the request page, or list requests on the **Reports** page.' },
     { table: { widths: [0.24, 0.76], head: ['Archive status', 'Meaning'], rows: [
       ['PdfPending', 'Request just closed; the PDF will be made within about 15 seconds.'],
       ['Stored', 'The PDF is in the database and can be downloaded.'],
     ] } },
+    { h2: 'Your own file folder' },
+    { p: 'Your provider can arrange for your PDFs and approvers\' documents to be saved as ordinary files in a folder of your own, on the server or a network share, instead of in the database. Everything is still downloaded from the app exactly as before.' },
+    { ul: [
+      'Files are grouped in **one folder per day** - the day each request was submitted, named like 2026-09-28. A request\'s PDF and all its documents are in the same day\'s folder, even if its approvals took several days.',
+      'PDFs keep their usual name (see **File names** in the chapter **Forms and approval chains**). Documents are named after their request and step, such as REQ-000014_Step-1_Supplier quote.pdf. A file is never overwritten: a second file of the same name gets " (2)".',
+      'The app remembers a fingerprint of every file. If a file is changed or removed outside the app, it is refused rather than shown: ask your provider to restore it from a backup.',
+      'Only files saved after the folder was set up go there; older ones stay in the database.',
+    ] },
 
     { h1: 'Notifications, reminders and escalation' },
     { table: { widths: [0.3, 0.26, 0.44], head: ['Email', 'To', 'Sent when'], rows: [
