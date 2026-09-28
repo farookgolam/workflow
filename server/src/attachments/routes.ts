@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { actorFrom, audit } from '../audit/audit';
 import { tenantQuery, withTx, type Tx } from '../db/query';
 import { AppError } from '../http/errors';
+import { fileRootFor, readCustomerFile, removeCustomerFile, writeCustomerFile } from '../customer-files/files';
 import { idParam } from '../workflow/routes';
 
 export const ATTACHMENT_LIMITS = { bytes: 10 * 1024 * 1024, perStep: 10 };
@@ -93,38 +94,59 @@ approverAttachmentsRouter.post('/:requestStepId/attachments', rawFile, async (re
   const content: Buffer = req.body;
   const { fileName, contentType } = checkFile(name, content);
 
-  const attachmentId = await withTx(async (tx) => {
-    const step = await openStepFor(u.tenantId, u.userId, requestStepId, tx);
-    const [{ n }] = await tenantQuery<{ n: number }>(u.tenantId, 'SELECT COUNT(*) AS n FROM StepAttachments WHERE TenantId = @TenantId AND RequestStepId = @RequestStepId', { RequestStepId: requestStepId }, tx);
-    if (n >= ATTACHMENT_LIMITS.perStep) throw new AppError(409, 'too_many_files', `A step can have at most ${ATTACHMENT_LIMITS.perStep} attachments`);
-
-    const [row] = await tenantQuery<{ AttachmentId: number }>(
+  // a customer with its own file folder: the file goes there (written first, removed again if the rest fails)
+  const root = await fileRootFor(u.tenantId);
+  let onDisk: { filePath: string; sha: Buffer } | null = null;
+  if (root) {
+    const [where] = await tenantQuery<{ RequestNumber: string; StepOrder: number }>(
       u.tenantId,
-      `INSERT INTO StepAttachments (TenantId, RequestId, RequestStepId, FileName, ContentType, SizeBytes, Sha256, Content, UploadedByUserId)
-       OUTPUT inserted.AttachmentId
-       VALUES (@TenantId, @RequestId, @RequestStepId, @File, @Type, @Size, @Sha, @Content, @UserId)`,
-      {
-        RequestId: step.RequestId,
-        RequestStepId: requestStepId,
-        File: fileName,
-        Type: contentType,
-        Size: content.length,
-        Sha: crypto.createHash('sha256').update(content).digest(),
-        Content: content,
-        UserId: u.userId,
-      },
-      tx,
+      `SELECT r.RequestNumber, rs.StepOrder FROM RequestSteps rs JOIN Requests r ON r.TenantId = rs.TenantId AND r.RequestId = rs.RequestId
+        WHERE rs.TenantId = @TenantId AND rs.RequestStepId = @RequestStepId`,
+      { RequestStepId: requestStepId },
     );
-    const id = Number(row.AttachmentId);
-    await audit(u.tenantId, actorFrom(req), {
-      action: 'attachment.added',
-      entityType: 'StepAttachment',
-      entityId: id,
-      requestId: step.RequestId,
-      detail: { requestStepId, fileName, sizeBytes: content.length },
-    }, tx);
-    return id;
-  });
+    if (!where) throw new AppError(404, 'not_found', 'Approval step not found');
+    onDisk = await writeCustomerFile(root, [where.RequestNumber, `Step ${where.StepOrder} attachments`], fileName, content);
+  }
+
+  let attachmentId: number;
+  try {
+    attachmentId = await withTx(async (tx) => {
+      const step = await openStepFor(u.tenantId, u.userId, requestStepId, tx);
+      const [{ n }] = await tenantQuery<{ n: number }>(u.tenantId, 'SELECT COUNT(*) AS n FROM StepAttachments WHERE TenantId = @TenantId AND RequestStepId = @RequestStepId', { RequestStepId: requestStepId }, tx);
+      if (n >= ATTACHMENT_LIMITS.perStep) throw new AppError(409, 'too_many_files', `A step can have at most ${ATTACHMENT_LIMITS.perStep} attachments`);
+
+      const [row] = await tenantQuery<{ AttachmentId: number }>(
+        u.tenantId,
+        `INSERT INTO StepAttachments (TenantId, RequestId, RequestStepId, FileName, ContentType, SizeBytes, Sha256, Content, FilePath, UploadedByUserId)
+         OUTPUT inserted.AttachmentId
+         VALUES (@TenantId, @RequestId, @RequestStepId, @File, @Type, @Size, @Sha, CAST(@Content AS VARBINARY(MAX)), @Path, @UserId)`, // a NULL is bound as text
+        {
+          RequestId: step.RequestId,
+          RequestStepId: requestStepId,
+          File: fileName,
+          Type: contentType,
+          Size: content.length,
+          Sha: crypto.createHash('sha256').update(content).digest(),
+          Content: onDisk ? null : content,
+          Path: onDisk?.filePath ?? null,
+          UserId: u.userId,
+        },
+        tx,
+      );
+      const id = Number(row.AttachmentId);
+      await audit(u.tenantId, actorFrom(req), {
+        action: 'attachment.added',
+        entityType: 'StepAttachment',
+        entityId: id,
+        requestId: step.RequestId,
+        detail: { requestStepId, fileName, sizeBytes: content.length, ...(onDisk ? { path: onDisk.filePath } : {}) },
+      }, tx);
+      return id;
+    });
+  } catch (err) {
+    if (onDisk) await removeCustomerFile(onDisk.filePath, root);
+    throw err;
+  }
 
   res.status(201).json({ attachment: { attachmentId, fileName, contentType, sizeBytes: content.length } });
 });
@@ -134,11 +156,11 @@ approverAttachmentsRouter.delete('/:requestStepId/attachments/:attachmentId', as
   const requestStepId = idParam(req.params.requestStepId);
   const attachmentId = idParam(req.params.attachmentId);
 
-  await withTx(async (tx) => {
+  const removed = await withTx(async (tx) => {
     const step = await openStepFor(u.tenantId, u.userId, requestStepId, tx);
-    const [a] = await tenantQuery<{ FileName: string }>(
+    const [a] = await tenantQuery<{ FileName: string; FilePath: string | null }>(
       u.tenantId,
-      'SELECT FileName FROM StepAttachments WHERE TenantId = @TenantId AND AttachmentId = @Id AND RequestStepId = @RequestStepId',
+      'SELECT FileName, FilePath FROM StepAttachments WHERE TenantId = @TenantId AND AttachmentId = @Id AND RequestStepId = @RequestStepId',
       { Id: attachmentId, RequestStepId: requestStepId },
       tx,
     );
@@ -151,15 +173,18 @@ approverAttachmentsRouter.delete('/:requestStepId/attachments/:attachmentId', as
       requestId: step.RequestId,
       detail: { requestStepId, fileName: a.FileName },
     }, tx);
+    return a;
   });
+  // the row is gone for good: now its file in the customer's folder, if it had one
+  if (removed.FilePath) await removeCustomerFile(removed.FilePath, await fileRootFor(u.tenantId));
   res.status(204).end();
 });
 
 async function sendAttachment(req: Request, res: Response, requestId: number, attachmentId: number, approver?: number): Promise<void> {
   const { tenantId } = req.user!;
-  const [a] = await tenantQuery<{ FileName: string; ContentType: string; Content: Buffer; Allowed: number }>(
+  const [a] = await tenantQuery<{ FileName: string; ContentType: string; Content: Buffer | null; FilePath: string | null; Sha256: Buffer; Allowed: number }>(
     tenantId,
-    `SELECT a.FileName, a.ContentType, a.Content,
+    `SELECT a.FileName, a.ContentType, a.Content, a.FilePath, a.Sha256,
             CASE WHEN @Approver IS NULL THEN 1
                  WHEN EXISTS (SELECT 1 FROM RequestSteps mine
                                WHERE mine.TenantId = a.TenantId AND mine.RequestId = a.RequestId AND mine.StepOrder >= s.StepOrder
@@ -171,13 +196,14 @@ async function sendAttachment(req: Request, res: Response, requestId: number, at
     { Id: attachmentId, RequestId: requestId, Approver: approver ?? null },
   );
   if (!a || a.Allowed !== 1) throw new AppError(404, 'not_found', 'Attachment not found');
+  const content = a.FilePath ? await readCustomerFile(a.FilePath, a.Sha256) : a.Content!;
 
   await audit(tenantId, actorFrom(req), { action: 'attachment.downloaded', entityType: 'StepAttachment', entityId: attachmentId, requestId, detail: { fileName: a.FileName } });
   const ascii = a.FileName.replace(/[^\w. -]/g, '_');
   res.setHeader('Content-Type', a.ContentType);
   res.setHeader('Content-Disposition', `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(a.FileName)}`);
   res.setHeader('Cache-Control', 'private, no-store');
-  res.end(a.Content);
+  res.end(content);
 }
 
 approverAttachmentsRouter.get('/requests/:id/attachments/:attachmentId', (req, res) =>

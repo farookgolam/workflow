@@ -140,6 +140,43 @@ function Identity({ tenant, reload }: { tenant: TenantSummary; reload(): void })
   );
 }
 
+/** Where this customer's closed-request PDFs and approvers' attachments are kept. */
+function FileStorage({ tenant, reload }: { tenant: TenantSummary; reload(): void }) {
+  const act = useGlobalAction();
+  const [folder, setFolder] = useState(tenant.fileStorageRoot ?? '');
+  const current = tenant.fileStorageRoot;
+
+  const save = (value: string | null) =>
+    act.run(async () => {
+      await gapi(`/tenants/${tenant.tenantId}`, { method: 'PATCH', body: { fileStorageRoot: value } });
+      reload();
+      return value ? `New files for ${tenant.name} will be saved in ${value}.` : `New files for ${tenant.name} will be kept in the database.`;
+    });
+
+  return (
+    <section className="card stack">
+      <h2>File storage</h2>
+      {act.error && <p className="notice error">{act.error}</p>}
+      {act.ok && <p className="notice">{act.ok}</p>}
+      <p className="muted" style={{ margin: 0 }}>
+        Closed-request PDFs and approvers' attachments are kept {current ? <>in the folder <strong className="mono">{current}</strong></> : <>in the database</>}.
+      </p>
+      <div className="field">
+        <label htmlFor="cfolder">Folder for this customer's files</label>
+        <input id="cfolder" className="mono" value={folder} placeholder="D:\CustomerFiles\Acme  or  \\fileserver\approvals\Acme" onChange={(e) => setFolder(e.target.value)} />
+        <p className="hint">
+          Files are saved there only, one sub-folder per request, and the app refuses any file changed outside it. The account the app runs as needs Modify permission on the folder; it is checked when you save.
+          Changing this affects new files only - files already saved stay where they are.
+        </p>
+      </div>
+      <div className="actions">
+        <button className="primary" disabled={act.busy || !folder.trim() || folder.trim() === current} onClick={() => void save(folder.trim())}>{act.busy ? 'Checking…' : 'Use this folder'}</button>
+        {current && <button className="link" disabled={act.busy} onClick={() => { setFolder(''); void save(null); }}>Keep new files in the database instead</button>}
+      </div>
+    </section>
+  );
+}
+
 const fmtDay = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }) : '—');
 
 function RemoveCustomer({ tenant }: { tenant: TenantSummary }) {
@@ -275,6 +312,7 @@ export function CustomerDetail() {
       ) : (
         <>
           <Identity tenant={tenant} reload={detail.reload} />
+          <FileStorage tenant={tenant} reload={detail.reload} />
           <Admins tenantId={tenantId} admins={admins} reload={detail.reload} />
           <SupportAccess tenant={tenant} />
           <RemoveCustomer tenant={tenant} />

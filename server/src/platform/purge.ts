@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config';
 import { unscopedQuery } from '../db/query';
+import { removeCustomerFile } from '../customer-files/files';
 import { forgetTenant } from '../tenant';
 import { platformAudit } from './identity';
 
@@ -33,6 +34,13 @@ export async function purgeDueTenants(): Promise<number[]> {
   );
   const done: number[] = [];
   for (const t of due) {
+    // files in the customer's own folder (migration 025): only the ones the app wrote, never the folder wholesale
+    const files = await unscopedQuery<{ FilePath: string }>(
+      `SELECT FilePath FROM RequestDocuments WHERE TenantId = @Id AND FilePath IS NOT NULL
+       UNION ALL SELECT FilePath FROM StepAttachments WHERE TenantId = @Id AND FilePath IS NOT NULL`,
+      { Id: t.TenantId },
+    );
+    const [{ FileStorageRoot: root }] = await unscopedQuery<{ FileStorageRoot: string | null }>('SELECT FileStorageRoot FROM Tenants WHERE TenantId = @Id', { Id: t.TenantId });
     try {
       await unscopedQuery('EXEC dbo.PurgeTenant @TenantId = @Id', { Id: t.TenantId });
     } catch (err) {
@@ -49,6 +57,7 @@ export async function purgeDueTenants(): Promise<number[]> {
         leftovers.push(dir);
       }
     }
+    for (const f of files) await removeCustomerFile(f.FilePath, root);
 
     await platformAudit(null, null, {
       action: 'tenant.deleted',

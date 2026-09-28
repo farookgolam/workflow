@@ -85,6 +85,8 @@ export interface TenantSummary {
   /** Set once removed: kept (restorable) until purgeAfter, then deleted for good. */
   removedAt: string | null;
   purgeAfter: string | null;
+  /** Folder for this customer's files; null when they are kept in the database. */
+  fileStorageRoot: string | null;
 }
 
 export interface GlobalAdminSummary {

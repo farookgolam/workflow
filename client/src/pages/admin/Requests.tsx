@@ -81,7 +81,7 @@ export function AdminRequests() {
 interface Step { requestStepId: number; stepOrder: number; name: string; status: string; assignedUserId: number; assignedTo: string; delegateUserId: number | null; activatedAt: string | null; dueAt: string | null; actedAt: string | null; actedBy: string | null; actedIp: string | null; comments: string | null; responses: FieldValue[]; attachments: Attachment[] }
 interface Detail {
   request: { requestId: number; requestNumber: string; formName: string; status: string; totalSteps: number; submitterName: string; submittedAt: string; closedAt: string | null; rejectionReason: string | null; cancelReason: string | null; data: FieldValue[]; steps: Step[] };
-  archive: { status: string; pdfAvailable: boolean; pdfBytes: number | null };
+  archive: { status: string; pdfAvailable: boolean; pdfBytes: number | null; pdfInFolder?: boolean };
   audit: { auditId: number; occurredAt: string; action: string; fromState: string | null; toState: string | null; ip: string | null; user: string }[];
   notifications: { notificationId: number; type: string; to: string; subject: string; status: string; attempts: number; createdAt: string; sentAt: string | null; lastError: string | null }[];
 }
@@ -137,8 +137,8 @@ export function AdminRequestDetail() {
         )}
         {archive.status !== 'None' && (
           <dl className="values" style={{ marginTop: '1rem' }}>
-            <div><dt>Archive status</dt><dd>{ARCHIVE_LABEL[archive.status] ?? archive.status}</dd></div>
-            {archive.pdfBytes !== null && <div><dt>Stored PDF</dt><dd>In the database · {Math.max(1, Math.round(archive.pdfBytes / 1024))} KB</dd></div>}
+            <div><dt>Archive status</dt><dd>{archive.pdfInFolder ? 'Stored in your file folder' : ARCHIVE_LABEL[archive.status] ?? archive.status}</dd></div>
+            {archive.pdfBytes !== null && <div><dt>Stored PDF</dt><dd>{archive.pdfInFolder ? 'In your organisation\'s file folder' : 'In the database'} · {Math.max(1, Math.round(archive.pdfBytes / 1024))} KB</dd></div>}
           </dl>
         )}
       </section>

@@ -120,7 +120,8 @@ adminRequestListRouter.get('/:id', async (req, res) => {
   const [archive] = await tenantQuery<Record<string, any>>(
     tenantId,
     `SELECT r.ArchiveStatus, CASE WHEN EXISTS (SELECT 1 FROM RequestDocuments d WHERE d.TenantId = r.TenantId AND d.RequestId = r.RequestId) OR r.PdfLocalPath IS NOT NULL THEN 1 ELSE 0 END AS PdfAvailable,
-            (SELECT d.SizeBytes FROM RequestDocuments d WHERE d.TenantId = r.TenantId AND d.RequestId = r.RequestId) AS PdfBytes
+            (SELECT d.SizeBytes FROM RequestDocuments d WHERE d.TenantId = r.TenantId AND d.RequestId = r.RequestId) AS PdfBytes,
+            (SELECT CASE WHEN d.FilePath IS NULL THEN 0 ELSE 1 END FROM RequestDocuments d WHERE d.TenantId = r.TenantId AND d.RequestId = r.RequestId) AS PdfInFolder
        FROM Requests r WHERE r.TenantId = @TenantId AND r.RequestId = @R`,
     { R: requestId },
   );
@@ -140,6 +141,8 @@ adminRequestListRouter.get('/:id', async (req, res) => {
     request: detail,
     archive: {
       status: archive.ArchiveStatus, pdfAvailable: archive.PdfAvailable === 1, pdfBytes: archive.PdfBytes,
+      // the organisation's own file folder rather than the database (the path itself is not shown to customers)
+      pdfInFolder: archive.PdfInFolder === 1,
     },
     audit: auditRows.map((a) => ({ auditId: a.AuditId, occurredAt: a.OccurredAt, action: a.Action, fromState: a.FromState, toState: a.ToState, ip: a.IpAddress, user: a.DisplayName ?? 'System', detail: a.DetailJson ? JSON.parse(a.DetailJson) : null })),
     notifications: mails.map((m) => ({ notificationId: m.NotificationId, type: m.Type, to: m.RecipientEmail, subject: m.Subject, status: m.Status, attempts: m.Attempts, createdAt: m.CreatedAt, sentAt: m.SentAt, lastError: m.LastError })),

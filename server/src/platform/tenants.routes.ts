@@ -15,6 +15,7 @@ import { AppError } from '../http/errors';
 import { settingsForApi, updateSettings } from '../settings/service';
 import { forgetTenant, tenantBaseUrl } from '../tenant';
 import { platformAudit } from './identity';
+import { checkFileRoot } from '../customer-files/files';
 import { hostSchema, provisionTenant, slugSchema } from './provision';
 
 export const platformTenantsRouter = Router();
@@ -27,6 +28,8 @@ const createBody = z.object({
   adminDisplayName: z.string().trim().min(2).max(200),
   adminKey: z.string().regex(/^\d{6}$/, 'The password key must be exactly 6 digits').optional(),
   notifyEmail: z.string().trim().email().max(320).optional().nullable(),
+  // a folder for this customer's files (PDFs, attachments) instead of the database; checked before it is saved
+  fileStorageRoot: z.string().trim().max(400).optional().nullable(),
 });
 
 const patchBody = z.object({
@@ -34,6 +37,7 @@ const patchBody = z.object({
   host: hostSchema.optional().nullable(),
   notifyEmail: z.string().trim().email().max(320).optional().nullable(),
   isActive: z.boolean().optional(),
+  fileStorageRoot: z.string().trim().max(400).optional().nullable(), // '' or null: back to the database, for new files
 });
 
 interface TenantRow {
@@ -52,6 +56,7 @@ interface TenantRow {
   LastActivityAt: Date | null;
   RemovedAt: Date | null;
   PurgeAfter: Date | null;
+  FileStorageRoot: string | null;
 }
 
 const shape = (r: TenantRow) => ({
@@ -68,10 +73,12 @@ const shape = (r: TenantRow) => ({
   // set once a global administrator removes it: the data is deleted for good at purgeAfter
   removedAt: r.RemovedAt,
   purgeAfter: r.PurgeAfter,
+  // null: files are kept in the database
+  fileStorageRoot: r.FileStorageRoot,
 });
 
 const SUMMARY = `
-  SELECT t.TenantId, t.Name, t.Slug, t.Host, t.AdminNotifyEmail, t.IsActive, t.CreatedAt, t.RemovedAt, t.PurgeAfter,
+  SELECT t.TenantId, t.Name, t.Slug, t.Host, t.AdminNotifyEmail, t.IsActive, t.CreatedAt, t.RemovedAt, t.PurgeAfter, t.FileStorageRoot,
          (SELECT COUNT(*) FROM Users u WHERE u.TenantId = t.TenantId AND u.IsActive = 1) AS Users,
          (SELECT COUNT(*) FROM UserRoles r WHERE r.TenantId = t.TenantId AND r.Role = 'Admin') AS Admins,
          (SELECT COUNT(*) FROM Forms f WHERE f.TenantId = t.TenantId AND f.IsActive = 1) AS Forms,
@@ -117,6 +124,7 @@ platformTenantsRouter.get('/:tenantId', async (req, res) => {
 platformTenantsRouter.post('/', async (req, res) => {
   const body = createBody.parse(req.body);
   const me = req.platformAdmin!;
+  const fileStorageRoot = body.fileStorageRoot ? await checkFileRoot(body.fileStorageRoot) : null;
 
   const provisioned = await provisionTenant(
     {
@@ -126,6 +134,7 @@ platformTenantsRouter.post('/', async (req, res) => {
       notifyEmail: body.notifyEmail ?? null,
       admin: { email: body.adminEmail, displayName: body.adminDisplayName },
       adminKey: body.adminKey,
+      fileStorageRoot,
     },
     { platformAdminEmail: me.email },
   );
@@ -135,7 +144,7 @@ platformTenantsRouter.post('/', async (req, res) => {
     entityType: 'Tenant',
     entityId: provisioned.tenantId,
     tenantId: provisioned.tenantId,
-    detail: { slug: body.slug, host: body.host ?? null, admin: body.adminEmail },
+    detail: { slug: body.slug, host: body.host ?? null, admin: body.adminEmail, fileStorageRoot },
   });
 
   const row = await loadOr404(provisioned.tenantId);
@@ -153,6 +162,8 @@ platformTenantsRouter.patch('/:tenantId', async (req, res) => {
   const body = patchBody.parse(req.body);
   const me = req.platformAdmin!;
   const before = await loadEditableOr404(tenantId);
+  const fileRootGiven = 'fileStorageRoot' in body;
+  const fileStorageRoot = body.fileStorageRoot ? await checkFileRoot(body.fileStorageRoot) : null;
 
   if (body.host) {
     const clash = await unscopedQuery('SELECT 1 AS x FROM Tenants WHERE Host = @Host AND TenantId <> @Id', { Host: body.host, Id: tenantId });
@@ -165,7 +176,8 @@ platformTenantsRouter.patch('/:tenantId', async (req, res) => {
         SET Name = COALESCE(@Name, Name),
             Host = CASE WHEN @HostGiven = 1 THEN @Host ELSE Host END,
             AdminNotifyEmail = CASE WHEN @NotifyGiven = 1 THEN @Notify ELSE AdminNotifyEmail END,
-            IsActive = COALESCE(@IsActive, IsActive)
+            IsActive = COALESCE(@IsActive, IsActive),
+            FileStorageRoot = CASE WHEN @RootGiven = 1 THEN @Root ELSE FileStorageRoot END
       WHERE TenantId = @TenantId`,
     {
       Name: body.name ?? null,
@@ -174,11 +186,13 @@ platformTenantsRouter.patch('/:tenantId', async (req, res) => {
       Notify: body.notifyEmail ?? null,
       NotifyGiven: 'notifyEmail' in body ? 1 : 0,
       IsActive: body.isActive === undefined ? null : body.isActive,
+      RootGiven: fileRootGiven ? 1 : 0,
+      Root: fileStorageRoot,
     },
   );
   forgetTenant();
 
-  const changed = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined));
+  const changed = { ...Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined)), ...(fileRootGiven ? { fileStorageRoot, fileStorageRootWas: before.FileStorageRoot } : {}) };
   await platformAudit(req, me.platformAdminId, {
     action: body.isActive === false ? 'tenant.suspended' : body.isActive === true ? 'tenant.reactivated' : 'tenant.updated',
     entityType: 'Tenant',

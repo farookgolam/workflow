@@ -1,5 +1,7 @@
 // Archive pipeline, identical for Approved and Rejected requests:
 //   PdfPending --(PDF made and stored in RequestDocuments)--> Stored
+// For a customer with its own file folder (migration 025) the PDF itself is written there and the row keeps
+// only its path and fingerprint.
 // It runs AFTER the decision transaction has committed, so the submitter's notification is
 // already in the outbox - nothing here can delay or block it. The PDF is kept only in the database;
 // earlier versions also uploaded it to SharePoint (the statuses PendingUpload / Uploaded / Failed of
@@ -10,6 +12,7 @@ import path from 'node:path';
 import { audit, systemActor } from '../audit/audit';
 import { config } from '../config';
 import { tenantQuery, unscopedQuery, withTx, type Tx } from '../db/query';
+import { fileRootFor, readCustomerFile, removeCustomerFile, writeCustomerFile } from '../customer-files/files';
 import { loadRequestDetail } from '../workflow/read';
 import { archiveFileName, buildRequestPdf, type AuditRow } from './pdf';
 
@@ -66,39 +69,53 @@ async function generatePdf(c: Candidate): Promise<void> {
   const fileName = archiveFileName(detail);
   const sha = crypto.createHash('sha256').update(pdf).digest();
 
-  await withTx(async (tx) => {
-    await storeDocument(c.TenantId, c.RequestId, fileName, pdf, sha, tx);
-    await tenantQuery(
-      c.TenantId,
-      `UPDATE Requests SET ArchiveStatus = 'Stored', PdfSha256 = @Sha, NextUploadAttemptAt = NULL
-        WHERE TenantId = @TenantId AND RequestId = @RequestId AND ArchiveStatus = 'PdfPending'`,
-      { Sha: sha, RequestId: c.RequestId },
-      tx,
-    );
-    await audit(c.TenantId, systemActor, { action: 'archive.pdf_stored', entityType: 'Request', entityId: c.RequestId, requestId: c.RequestId, fromState: 'PdfPending', toState: 'Stored', detail: { file: fileName, bytes: pdf.length } }, tx);
-  });
+  // in the customer's folder if it has one: written first, and removed again if the database part fails
+  const root = await fileRootFor(c.TenantId);
+  const onDisk = root ? await writeCustomerFile(root, [detail.requestNumber], fileName, pdf) : null;
+  try {
+    await withTx(async (tx) => {
+      await storeDocument(c.TenantId, c.RequestId, fileName, pdf, sha, tx, onDisk?.filePath ?? null);
+      await tenantQuery(
+        c.TenantId,
+        `UPDATE Requests SET ArchiveStatus = 'Stored', PdfSha256 = @Sha, NextUploadAttemptAt = NULL
+          WHERE TenantId = @TenantId AND RequestId = @RequestId AND ArchiveStatus = 'PdfPending'`,
+        { Sha: sha, RequestId: c.RequestId },
+        tx,
+      );
+      await audit(c.TenantId, systemActor, { action: 'archive.pdf_stored', entityType: 'Request', entityId: c.RequestId, requestId: c.RequestId, fromState: 'PdfPending', toState: 'Stored', detail: { file: fileName, bytes: pdf.length, ...(onDisk ? { path: onDisk.filePath } : {}) } }, tx);
+    });
+  } catch (err) {
+    if (onDisk) await removeCustomerFile(onDisk.filePath, root);
+    throw err;
+  }
 }
 
-/** Keeps a request's PDF in RequestDocuments, where it can never be changed (see migration 019). */
-async function storeDocument(tenantId: number, requestId: number, fileName: string, pdf: Buffer, sha: Buffer, tx: Tx): Promise<void> {
-  await tenantQuery(
+/**
+ * Keeps a request's PDF in RequestDocuments, where it can never be changed (see migration 019): the bytes
+ * themselves, or - with `filePath` - where they were written in the customer's folder.
+ */
+async function storeDocument(tenantId: number, requestId: number, fileName: string, pdf: Buffer, sha: Buffer, tx: Tx, filePath: string | null = null): Promise<void> {
+  const [{ n }] = await tenantQuery<{ n: number }>(
     tenantId,
     `IF NOT EXISTS (SELECT 1 FROM RequestDocuments WHERE TenantId = @TenantId AND RequestId = @RequestId)
-       INSERT INTO RequestDocuments (TenantId, RequestId, FileName, SizeBytes, Sha256, Content)
-       VALUES (@TenantId, @RequestId, @File, @Size, @Sha, @Content)`,
-    { RequestId: requestId, File: fileName, Size: pdf.length, Sha: sha, Content: pdf },
+       INSERT INTO RequestDocuments (TenantId, RequestId, FileName, SizeBytes, Sha256, Content, FilePath)
+       VALUES (@TenantId, @RequestId, @File, @Size, @Sha, CAST(@Content AS VARBINARY(MAX)), @Path); -- a NULL is bound as text
+     SELECT @@ROWCOUNT AS n;`,
+    { RequestId: requestId, File: fileName, Size: pdf.length, Sha: sha, Content: filePath ? null : pdf, Path: filePath },
     tx,
   );
+  // already stored by an earlier run: the file just written is not the record, so it must not stay behind
+  if (n === 0 && filePath) throw new Error('This request already has a stored PDF');
 }
 
 /** A request's stored PDF: from the database, or - for a request archived before 019 and not copied yet - from the old file. */
 export async function loadDocument(tenantId: number, requestId: number): Promise<{ fileName: string; content: Buffer } | null> {
-  const [d] = await tenantQuery<{ FileName: string; Content: Buffer }>(
+  const [d] = await tenantQuery<{ FileName: string; Content: Buffer | null; FilePath: string | null; Sha256: Buffer }>(
     tenantId,
-    'SELECT FileName, Content FROM RequestDocuments WHERE TenantId = @TenantId AND RequestId = @RequestId',
+    'SELECT FileName, Content, FilePath, Sha256 FROM RequestDocuments WHERE TenantId = @TenantId AND RequestId = @RequestId',
     { RequestId: requestId },
   );
-  if (d) return { fileName: d.FileName, content: d.Content };
+  if (d) return { fileName: d.FileName, content: d.FilePath ? await readCustomerFile(d.FilePath, d.Sha256) : d.Content! };
   const [r] = await tenantQuery<{ PdfLocalPath: string | null }>(tenantId, 'SELECT PdfLocalPath FROM Requests WHERE TenantId = @TenantId AND RequestId = @RequestId', { RequestId: requestId });
   if (!r?.PdfLocalPath) return null;
   const file = pdfAbsolutePath(r.PdfLocalPath);
@@ -168,6 +185,6 @@ export function startArchiveWorker(intervalMs = 15_000): () => void {
   };
   const timer = setInterval(tick, intervalMs);
   void tick();
-  console.log('Archive worker started (PDFs of closed requests are kept in the database)');
+  console.log("Archive worker started (PDFs of closed requests are kept in the database, or in a customer's own file folder)");
   return () => clearInterval(timer);
 }

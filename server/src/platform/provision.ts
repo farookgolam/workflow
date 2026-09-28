@@ -31,6 +31,8 @@ export interface NewTenant {
   admin: { email: string; displayName: string };
   /** The administrator's 6-digit key. Omit to have one generated and returned once. */
   adminKey?: string;
+  /** Checked folder for this customer's files, or null/absent for the database. */
+  fileStorageRoot?: string | null;
 }
 
 export interface ProvisionedTenant {
@@ -74,8 +76,8 @@ export async function provisionTenant(input: NewTenant, by?: { platformAdminEmai
   const actor: Actor = systemActor;
   const result = await withTx(async (tx) => {
     const [tenant] = await unscopedQuery<{ TenantId: number }>(
-      'INSERT INTO Tenants (Name, Slug, Host, AdminNotifyEmail) OUTPUT inserted.TenantId VALUES (@Name, @Slug, @Host, @Notify)',
-      { Name: name, Slug: slug, Host: host, Notify: input.notifyEmail ?? adminEmail },
+      'INSERT INTO Tenants (Name, Slug, Host, AdminNotifyEmail, FileStorageRoot) OUTPUT inserted.TenantId VALUES (@Name, @Slug, @Host, @Notify, @Root)',
+      { Name: name, Slug: slug, Host: host, Notify: input.notifyEmail ?? adminEmail, Root: input.fileStorageRoot ?? null },
       tx,
     );
     await unscopedQuery('INSERT INTO RequestCounters (TenantId) VALUES (@TenantId)', { TenantId: tenant.TenantId }, tx);

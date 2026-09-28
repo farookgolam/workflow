@@ -24,10 +24,11 @@ function NewCustomer({ onCreated }: { onCreated(): void }) {
   const [host, setHost] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
   const [adminDisplayName, setAdminDisplayName] = useState('');
+  const [fileStorageRoot, setFileStorageRoot] = useState('');
   const [created, setCreated] = useState<{ tenant: TenantSummary; adminEmail: string; key: string | null } | null>(null);
 
   const reset = () => {
-    setName(''); setSlug(''); setSlugTouched(false); setHost(''); setAdminEmail(''); setAdminDisplayName('');
+    setName(''); setSlug(''); setSlugTouched(false); setHost(''); setAdminEmail(''); setAdminDisplayName(''); setFileStorageRoot('');
     act.clear();
   };
 
@@ -39,6 +40,7 @@ function NewCustomer({ onCreated }: { onCreated(): void }) {
         host: host.trim() || null,
         adminEmail: adminEmail.trim(),
         adminDisplayName: adminDisplayName.trim(),
+        fileStorageRoot: fileStorageRoot.trim() || null,
       };
       const res = await gapi<{ tenant: TenantSummary; admin: { email: string }; generatedAdminKey: string | null }>('/tenants', { method: 'POST', body });
       setCreated({ tenant: res.tenant, adminEmail: res.admin.email, key: res.generatedAdminKey });
@@ -103,6 +105,11 @@ function NewCustomer({ onCreated }: { onCreated(): void }) {
       <div className="field">
         <label htmlFor="adminName">First administrator's name</label>
         <input id="adminName" value={adminDisplayName} onChange={(e) => setAdminDisplayName(e.target.value)} />
+      </div>
+      <div className="field">
+        <label htmlFor="fileRoot">Folder for this customer's files (optional)</label>
+        <input id="fileRoot" className="mono" value={fileStorageRoot} placeholder="D:\CustomerFiles\Acme  or  \\fileserver\approvals\Acme" onChange={(e) => setFileStorageRoot(e.target.value)} />
+        <p className="hint">Closed-request PDFs and approvers' attachments are saved there instead of the database. Leave blank to keep them in the database. The app checks it can write there before creating the customer.</p>
       </div>
       <div className="actions">
         <button className="primary" disabled={act.busy || !name.trim() || !adminEmail.trim() || adminDisplayName.trim().length < 2} onClick={() => void submit()}>
