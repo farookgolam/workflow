@@ -15,6 +15,8 @@ const tok: Record<string, string> = {};
 // named like the tenant-1 form: the column keys say nothing, the headings do
 const fields = [
   { key: 'week', label: 'Week of', type: 'date' },
+  { key: 'employeeId', label: 'Employee ID', type: 'text' },
+  { key: 'intro', label: 'Fill in every day you worked', type: 'heading' },
   { key: 'dataGrid', label: 'Timesheet', type: 'grid', props: { minRows: 1, columns: [
     { key: 'date', label: 'Date', type: 'date', required: true },
     { key: 'school', label: 'School', type: 'text' },
@@ -26,7 +28,7 @@ const fields = [
 const hours = (body: Record<string, unknown>, as = 'admin') => request(app).post(`${api}/admin/reports/hours/run`).set(bearer(tok[as])).send({ formId, ...body });
 
 async function timesheet(who: 'sam' | 'kim', rows: Record<string, string>[], approve: boolean) {
-  const res = await request(app).post(`${api}/forms/${formId}/requests`).set(bearer(tok[who])).send({ values: { dataGrid: rows } });
+  const res = await request(app).post(`${api}/forms/${formId}/requests`).set(bearer(tok[who])).send({ values: { dataGrid: rows, employeeId: who === 'sam' ? 'E-100' : 'E-200' } });
   expect(res.status).toBe(201);
   if (approve) {
     const [step] = await tenantQuery<{ RequestStepId: number }>(t.tenantId, 'SELECT RequestStepId FROM RequestSteps WHERE TenantId = @TenantId AND RequestId = @R', { R: res.body.requestId });
@@ -91,6 +93,26 @@ describe('Hours report', () => {
     expect((await hours({ from: '2026-09-01' }, 'otherAdmin')).status).toBe(404);
   });
 
+  it('adds chosen fields of the form as extra columns, on every line and in the export', async () => {
+    const forms = await request(app).get(`${api}/admin/reports/hours/forms`).set(bearer(tok.admin));
+    // the form's own answerable fields are offered; the grid and layout elements are not
+    expect(forms.body.forms[0].fields.map((f: { key: string }) => f.key)).toEqual(['week', 'employeeId']);
+
+    const res = await hours({ from: '2026-09-01', to: '2026-09-05', fields: ['employeeId'] });
+    expect(res.status).toBe(200);
+    expect(res.body.extraColumns).toEqual([{ key: 'employeeId', label: 'Employee ID' }]);
+    expect(res.body.lines.map((l: { kind: string; extra: (string | null)[] }) => `${l.kind}:${l.extra.join('|')}`))
+      .toEqual(['line:E-200', 'subtotal:', 'line:E-100', 'line:E-100', 'subtotal:', 'total:']);
+
+    const csv = await request(app).post(`${api}/admin/reports/hours/export`).set(bearer(tok.admin)).send({ query: { formId, from: '2026-09-01', to: '2026-09-05', fields: ['employeeId'] }, format: 'csv' });
+    expect(csv.text).toContain('Submitter,Employee ID,Date,School,Time In,Time Out,Worked Hour,Request');
+    expect(csv.text).toContain('SAM,E-100,09/01/2026,Hawes,08:00,12:30,4.5,');
+    expect(csv.text).toContain('Subtotal - SAM,,2 day(s),,,,8.75,');
+
+    expect((await hours({ from: '2026-09-01', fields: ['dataGrid'] })).status).toBe(400); // not an extra-column field
+    expect((await hours({ from: '2026-09-01', fields: ['nope'] })).status).toBe(400);
+  });
+
   it('exports to Excel and CSV, and records the export', async () => {
     const csv = await request(app).post(`${api}/admin/reports/hours/export`).set(bearer(tok.admin)).send({ query: { formId, from: '2026-09-01', to: '2026-09-05' }, format: 'csv' });
     expect(csv.status).toBe(200);
@@ -101,6 +123,6 @@ describe('Hours report', () => {
     const xlsx = await request(app).post(`${api}/admin/reports/hours/export`).set(bearer(tok.admin)).send({ query: { formId, from: '2026-09-01' }, format: 'xlsx' }).buffer(true);
     expect(xlsx.status).toBe(200);
     const [a] = await tenantQuery<{ n: number }>(t.tenantId, "SELECT COUNT(*) AS n FROM AuditLog WHERE TenantId = @TenantId AND Action = 'report.exported'");
-    expect(a.n).toBe(2);
+    expect(a.n).toBe(3);
   });
 });

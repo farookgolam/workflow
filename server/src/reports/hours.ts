@@ -15,7 +15,12 @@ import { MAX_REQUESTS, csvCell } from './engine';
 
 interface GridColumn { key: string; label: string; type: string }
 export interface HoursMapping { date: string; school: string | null; timeIn: string | null; timeOut: string | null; worked: string | null }
-export interface HoursForm { formId: number; name: string; grid: string; gridLabel: string; columns: GridColumn[]; mapping: HoursMapping }
+/** A field of the form itself (outside the grid): shown, if chosen, on every line of that timesheet. */
+interface FormColumn { key: string; label: string; type: string }
+export interface HoursForm { formId: number; name: string; grid: string; gridLabel: string; columns: GridColumn[]; mapping: HoursMapping; fields: FormColumn[] }
+
+// types that hold no answer of their own, or nothing that fits in a cell
+const NOT_A_COLUMN = new Set(['grid', 'heading', 'paragraph', 'divider', 'image', 'signature', 'sigpad']);
 
 const TIMEISH = ['time'];
 const NUMBERISH = ['number', 'currency', 'calc'];
@@ -50,7 +55,17 @@ export async function hoursForms(tenantId: number): Promise<HoursForm[]> {
     const columns = ((r.PropsJson ? JSON.parse(r.PropsJson).columns : null) ?? []) as GridColumn[];
     const mapping = guessMapping(columns);
     if (!mapping || (!(mapping.timeIn && mapping.timeOut) && !mapping.worked)) continue;
-    out.push({ formId: r.FormId, name: r.Name, grid: r.FieldKey, gridLabel: r.Label, columns: columns.map((c) => ({ key: c.key, label: c.label, type: c.type })), mapping });
+    out.push({ formId: r.FormId, name: r.Name, grid: r.FieldKey, gridLabel: r.Label, columns: columns.map((c) => ({ key: c.key, label: c.label, type: c.type })), mapping, fields: [] });
+  }
+  if (out.length) {
+    const fields = await tenantQuery<{ FormId: number; FieldKey: string; Label: string; FieldType: string }>(
+      tenantId,
+      `SELECT FormId, FieldKey, Label, FieldType FROM FormFields
+        WHERE TenantId = @TenantId AND IsActive = 1 AND FormId IN (SELECT CAST(value AS INT) FROM OPENJSON(@Forms))
+        ORDER BY FormId, SortOrder`,
+      { Forms: JSON.stringify(out.map((f) => f.formId)) },
+    );
+    for (const f of out) f.fields = fields.filter((x) => x.FormId === f.formId && !NOT_A_COLUMN.has(x.FieldType)).map((x) => ({ key: x.FieldKey, label: x.Label, type: x.FieldType }));
   }
   return out;
 }
@@ -76,13 +91,15 @@ export const hoursQuery = z.object({
   from: isoDate,
   to: isoDate.nullable().default(null), // null: the single day `from`
   includeInProgress: z.boolean().default(false), // approved only unless asked; rejected and cancelled never count
+  fields: z.array(colKey).max(10).default([]), // extra columns: fields of the form itself, repeated on each line
 }).refine((q) => !q.to || q.to >= q.from, { message: 'The end date is before the start date', path: ['to'] });
 export type HoursQuery = z.infer<typeof hoursQuery>;
 
 type Cell = string | number | null;
-export interface HoursLine { kind: 'line' | 'subtotal' | 'total'; submitter: string; date: string | null; school: string | null; timeIn: string | null; timeOut: string | null; hours: number | null; requestNumber: string | null; days?: number }
+export interface HoursLine { kind: 'line' | 'subtotal' | 'total'; submitter: string; extra: (string | null)[]; date: string | null; school: string | null; timeIn: string | null; timeOut: string | null; hours: number | null; requestNumber: string | null; days?: number }
 export interface HoursResult {
   form: string; from: string; to: string; submitter: string | null; includeInProgress: boolean;
+  extraColumns: { key: string; label: string }[]; // the chosen form fields, in the order of each line's `extra`
   lines: HoursLine[]; // lines, then (for everyone) a subtotal after each person, then the total
   totalHours: number; lineCount: number; people: number; truncated: boolean;
 }
@@ -108,6 +125,11 @@ export async function runHours(tenantId: number, q: HoursQuery): Promise<HoursRe
     if (k && (!typeOf(k) || (types && !types.includes(typeOf(k)!)))) throw bad(`The column chosen for ${label} is not on this form's grid, or is the wrong type`);
   }
   if (!(map.timeIn && map.timeOut) && !map.worked) throw bad('Choose Time In and Time Out, or a Worked Hour column');
+  const extraColumns = [...new Set(q.fields)].map((k) => {
+    const f = form.fields.find((x) => x.key === k);
+    if (!f) throw new AppError(400, 'validation_failed', 'Invalid input', [{ path: 'fields', message: `"${k}" is not a field of this form` }]);
+    return { key: f.key, label: f.label };
+  });
   const to = q.to ?? q.from;
 
   const requests = await tenantQuery<{ RequestId: number; RequestNumber: string; UserId: number; DisplayName: string; Value: string | null }>(
@@ -125,6 +147,20 @@ export async function runHours(tenantId: number, q: HoursQuery): Promise<HoursRe
   const truncated = requests.length > MAX_REQUESTS;
   if (truncated) requests.length = MAX_REQUESTS;
 
+  // the chosen form fields of those requests, one value each
+  const extraValues = new Map<number, Map<string, string | null>>();
+  if (extraColumns.length && requests.length) {
+    const vals = await tenantQuery<{ RequestId: number; FieldKey: string; Value: string | null }>(
+      tenantId,
+      `SELECT d.RequestId, d.FieldKey, d.Value FROM RequestData d
+        WHERE d.TenantId = @TenantId AND d.FieldKey IN (SELECT value FROM OPENJSON(@Keys))
+          AND d.RequestId IN (SELECT CAST(value AS INT) FROM OPENJSON(@Ids))`,
+      { Keys: JSON.stringify(extraColumns.map((c) => c.key)), Ids: JSON.stringify(requests.map((r) => r.RequestId)) },
+    );
+    for (const v of vals) (extraValues.get(v.RequestId) ?? extraValues.set(v.RequestId, new Map()).get(v.RequestId)!).set(v.FieldKey, v.Value);
+  }
+  const noExtra = extraColumns.map(() => null);
+
   const text = (v: unknown) => (v === null || v === undefined || v === '' ? null : String(v));
   const byPerson = new Map<number, { name: string; lines: HoursLine[] }>();
   for (const r of requests) {
@@ -138,7 +174,8 @@ export async function runHours(tenantId: number, q: HoursQuery): Promise<HoursRe
       const stored = map.worked ? Number(text(row[map.worked]) ?? NaN) : NaN;
       const hours = Number.isFinite(stored) && stored >= 0 ? round2(stored) : elapsedHours(timeIn, timeOut);
       const person = byPerson.get(r.UserId) ?? { name: r.DisplayName, lines: [] };
-      person.lines.push({ kind: 'line', submitter: r.DisplayName, date, school: map.school ? text(row[map.school]) : null, timeIn, timeOut, hours, requestNumber: r.RequestNumber });
+      const extra = extraColumns.map((c) => text(extraValues.get(r.RequestId)?.get(c.key)));
+      person.lines.push({ kind: 'line', submitter: r.DisplayName, extra, date, school: map.school ? text(row[map.school]) : null, timeIn, timeOut, hours, requestNumber: r.RequestNumber });
       byPerson.set(r.UserId, person);
     }
   }
@@ -153,24 +190,24 @@ export async function runHours(tenantId: number, q: HoursQuery): Promise<HoursRe
     p.lines.sort(byTime);
     lines.push(...p.lines);
     all.push(...p.lines);
-    if (!q.submitterUserId) lines.push({ kind: 'subtotal', submitter: p.name, date: null, school: null, timeIn: null, timeOut: null, hours: sum(p.lines), requestNumber: null, days: days(p.lines) });
+    if (!q.submitterUserId) lines.push({ kind: 'subtotal', submitter: p.name, extra: noExtra, date: null, school: null, timeIn: null, timeOut: null, hours: sum(p.lines), requestNumber: null, days: days(p.lines) });
   }
-  lines.push({ kind: 'total', submitter: '', date: null, school: null, timeIn: null, timeOut: null, hours: sum(all), requestNumber: null, days: days(all) });
+  lines.push({ kind: 'total', submitter: '', extra: noExtra, date: null, school: null, timeIn: null, timeOut: null, hours: sum(all), requestNumber: null, days: days(all) });
 
   const submitter = q.submitterUserId ? (await hoursSubmitters(tenantId, q.formId)).find((u) => u.userId === q.submitterUserId)?.displayName ?? 'Unknown' : null;
-  return { form: form.name, from: q.from, to, submitter, includeInProgress: q.includeInProgress, lines, totalHours: sum(all), lineCount: all.length, people: people.length, truncated };
+  return { form: form.name, from: q.from, to, submitter, includeInProgress: q.includeInProgress, extraColumns, lines, totalHours: sum(all), lineCount: all.length, people: people.length, truncated };
 }
 
 // ---------------------------------------------------------------------------------------
 // exports
 // ---------------------------------------------------------------------------------------
 export const hoursTitle = (r: HoursResult) => `Hours - ${r.submitter ?? 'All submitters'} - ${r.from === r.to ? usDate(r.from) : `${usDate(r.from)} to ${usDate(r.to)}`}`;
-const headings = (r: HoursResult) => [...(r.submitter ? [] : ['Submitter']), 'Date', 'School', 'Time In', 'Time Out', 'Worked Hour', 'Request'];
+const headings = (r: HoursResult) => [...(r.submitter ? [] : ['Submitter']), ...r.extraColumns.map((c) => c.label), 'Date', 'School', 'Time In', 'Time Out', 'Worked Hour', 'Request'];
 const cells = (r: HoursResult, l: HoursLine): Cell[] => {
   const label = l.kind === 'total' ? 'Total' : l.kind === 'subtotal' ? `Subtotal - ${l.submitter}` : null;
   const lead: Cell[] = r.submitter ? [] : [label ?? l.submitter];
-  if (label) return [...lead, r.submitter ? label : `${l.days} day(s)`, null, null, null, l.hours, null];
-  return [...lead, l.date, l.school, l.timeIn, l.timeOut, l.hours, l.requestNumber]; // dates stay ISO here: CSV and Excel format them
+  if (label) return [...lead, ...l.extra, r.submitter ? label : `${l.days} day(s)`, null, null, null, l.hours, null];
+  return [...lead, ...l.extra, l.date, l.school, l.timeIn, l.timeOut, l.hours, l.requestNumber]; // dates stay ISO here: CSV and Excel format them
 };
 
 export function hoursCsv(r: HoursResult): string {

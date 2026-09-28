@@ -9,9 +9,9 @@ import { useAction, useLoad } from '../../hooks';
 
 interface GridColumn { key: string; label: string; type: string }
 interface Mapping { date: string; school: string | null; timeIn: string | null; timeOut: string | null; worked: string | null }
-interface HoursForm { formId: number; name: string; grid: string; gridLabel: string; columns: GridColumn[]; mapping: Mapping }
-interface Line { kind: 'line' | 'subtotal' | 'total'; submitter: string; date: string | null; school: string | null; timeIn: string | null; timeOut: string | null; hours: number | null; requestNumber: string | null; days?: number }
-interface Result { form: string; from: string; to: string; submitter: string | null; includeInProgress: boolean; lines: Line[]; totalHours: number; lineCount: number; people: number; truncated: boolean }
+interface HoursForm { formId: number; name: string; grid: string; gridLabel: string; columns: GridColumn[]; mapping: Mapping; fields: GridColumn[] }
+interface Line { kind: 'line' | 'subtotal' | 'total'; submitter: string; extra: (string | null)[]; date: string | null; school: string | null; timeIn: string | null; timeOut: string | null; hours: number | null; requestNumber: string | null; days?: number }
+interface Result { form: string; from: string; to: string; submitter: string | null; includeInProgress: boolean; extraColumns: { key: string; label: string }[]; lines: Line[]; totalHours: number; lineCount: number; people: number; truncated: boolean }
 
 /** Switches between the report builder and the Hours report. */
 export function ReportTabs() {
@@ -24,7 +24,7 @@ export function ReportTabs() {
 }
 
 const STORE = 'hoursReport';
-const remembered = (): Partial<{ formId: number; submitterUserId: number | null; range: boolean; from: string; to: string; includeInProgress: boolean; mappings: Record<number, Mapping> }> => {
+const remembered = (): Partial<{ formId: number; submitterUserId: number | null; range: boolean; from: string; to: string; includeInProgress: boolean; mappings: Record<number, Mapping>; fields: Record<number, string[]> }> => {
   try { return JSON.parse(localStorage.getItem(STORE) ?? '{}'); } catch { return {}; }
 };
 const remember = (v: object) => { try { localStorage.setItem(STORE, JSON.stringify({ ...remembered(), ...v })); } catch { /* private window: not remembered */ } };
@@ -66,6 +66,7 @@ export function AdminHoursReport() {
   const [to, setTo] = useState(saved.to ?? quickRanges()[0][2]);
   const [includeInProgress, setIncludeInProgress] = useState(saved.includeInProgress ?? false);
   const [mapping, setMapping] = useState<Mapping | null>(null);
+  const [fields, setFields] = useState<string[]>([]); // extra columns: fields of the form itself
   const [result, setResult] = useState<Result | null>(null);
   const act = useAction();
 
@@ -77,6 +78,8 @@ export function AdminHoursReport() {
     if (f?.formId !== formId) setFormId(f?.formId ?? null);
     const m = f ? remembered().mappings?.[f.formId] : undefined;
     setMapping(f ? (m && f.columns.some((c) => c.key === m.date) ? m : f.mapping) : null);
+    // the remembered extra columns that are still on the form
+    setFields(f ? (remembered().fields?.[f.formId] ?? []).filter((k) => f.fields.some((x) => x.key === k)) : []);
     setResult(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forms.data, formId]);
@@ -85,11 +88,11 @@ export function AdminHoursReport() {
     if (submitters.data && submitterUserId && !submitters.data.submitters.some((u) => u.userId === submitterUserId)) setSubmitterUserId(null);
   }, [submitters.data, submitterUserId]);
 
-  const query = form && mapping ? { formId: form.formId, mapping, submitterUserId, from, to: range ? to : null, includeInProgress } : null;
+  const query = form && mapping ? { formId: form.formId, mapping, submitterUserId, from, to: range ? to : null, includeInProgress, fields } : null;
   const changed = <T,>(set: (v: T) => void) => (v: T) => { set(v); setResult(null); };
   const run = () => act.run(async () => {
     if (!query) return;
-    remember({ formId: query.formId, submitterUserId, range, from, to, includeInProgress, mappings: { ...remembered().mappings, [query.formId]: mapping } });
+    remember({ formId: query.formId, submitterUserId, range, from, to, includeInProgress, mappings: { ...remembered().mappings, [query.formId]: mapping }, fields: { ...remembered().fields, [query.formId]: fields } });
     setResult(await api<Result>('/admin/reports/hours/run', { method: 'POST', body: query }));
   });
   const exportIt = (format: 'csv' | 'xlsx') => act.run(() => download('/admin/reports/hours/export', `hours.${format}`, { query, format }));
@@ -103,7 +106,7 @@ export function AdminHoursReport() {
 
       <section className="card">
         <h2>Hours worked</h2>
-        <p className="muted">The lines of a timesheet form - Date, School, Time In, Time Out and Worked Hour - for one person or everyone, by the <strong>day worked</strong>.</p>
+        <p className="muted">The lines of a timesheet form - Date, School, Time In, Time Out and Worked Hour, plus any extra columns you choose from the form - for one person or everyone, by the <strong>day worked</strong>.</p>
         {forms.error ? <p className="notice bad">{forms.error}</p> : !forms.data ? <p className="muted">Loading…</p> : forms.data.forms.length === 0 ? (
           <p className="notice">No form has a timesheet grid yet: a data grid with a <strong>Date</strong> column and <strong>Time In</strong> / <strong>Time Out</strong> (or <strong>Worked Hour</strong>) columns.</p>
         ) : (
@@ -157,6 +160,22 @@ export function AdminHoursReport() {
               </details>
             )}
 
+            {form && form.fields.length > 0 && (
+              <fieldset className="b-auto">
+                <legend>Extra columns from the form</legend>
+                <div>
+                  {form.fields.map((f) => (
+                    <label key={f.key} className="check inline">
+                      <input type="checkbox" checked={fields.includes(f.key)} disabled={!fields.includes(f.key) && fields.length >= 10}
+                        onChange={() => changed(setFields)(fields.includes(f.key) ? fields.filter((k) => k !== f.key) : [...fields, f.key])} />
+                      <span>{f.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="hint" style={{ marginBottom: 0 }}>Fields filled in once per timesheet (outside "{form.gridLabel}"), shown on each of its lines and in the export. Up to 10.</p>
+              </fieldset>
+            )}
+
             <div className="actions">
               <button className="primary" disabled={!query || act.busy || !from || (range && (!to || to < from))} onClick={() => void run()}>{act.busy ? 'Working…' : 'Run report'}</button>
               {result && <>
@@ -180,13 +199,13 @@ export function AdminHoursReport() {
           {result.lineCount === 0 ? <p className="muted">Nobody recorded hours on {result.from === result.to ? 'that day' : 'those days'}.</p> : (
             <div className="table-wrap">
               <table className="hr-table">
-                <thead><tr>{everyone && <th>Submitter</th>}<th>Date</th><th>School</th><th>Time In</th><th>Time Out</th><th className="num">Worked Hour</th><th>Request</th></tr></thead>
+                <thead><tr>{everyone && <th>Submitter</th>}{result.extraColumns.map((c) => <th key={c.key}>{c.label}</th>)}<th>Date</th><th>School</th><th>Time In</th><th>Time Out</th><th className="num">Worked Hour</th><th>Request</th></tr></thead>
                 <tbody>{result.lines.map((l, i) => l.kind === 'line' ? (
-                  <tr key={i}>{everyone && <td>{l.submitter}</td>}<td>{fmtDate(l.date)}</td><td>{l.school}</td><td>{l.timeIn}</td><td>{l.timeOut}</td><td className="num">{fmtHours(l.hours)}</td><td className="muted small">{l.requestNumber}</td></tr>
+                  <tr key={i}>{everyone && <td>{l.submitter}</td>}{l.extra.map((v, j) => <td key={j}>{v}</td>)}<td>{fmtDate(l.date)}</td><td>{l.school}</td><td>{l.timeIn}</td><td>{l.timeOut}</td><td className="num">{fmtHours(l.hours)}</td><td className="muted small">{l.requestNumber}</td></tr>
                 ) : (
                   <tr key={i} className={`hr-${l.kind}`}>
                     {everyone && <td>{l.kind === 'total' ? 'Total' : `Subtotal - ${l.submitter}`}</td>}
-                    <td colSpan={4}>{everyone ? `${l.days} day(s)` : `Total · ${l.days} day(s)`}</td>
+                    <td colSpan={4 + result.extraColumns.length}>{everyone ? `${l.days} day(s)` : `Total · ${l.days} day(s)`}</td>
                     <td className="num">{fmtHours(l.hours)}</td><td />
                   </tr>
                 ))}</tbody>
