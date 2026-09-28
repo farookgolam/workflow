@@ -1,7 +1,7 @@
 // Reports: choose a form, the columns to show, filters, and optionally how to group and summarise; run it on
 // screen, export it to CSV or Excel, and save it to run again later. The server does the work
 // (server/src/reports/engine.ts); this page only builds the definition and shows the result.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, api, download } from '../../api';
 import { useAction, useLoad } from '../../hooks';
 import { ReportTabs } from './HoursReport';
@@ -80,6 +80,14 @@ export function AdminReports() {
   const [current, setCurrent] = useState<{ reportId: number | null; name: string }>({ reportId: null, name: '' });
   const [adding, setAdding] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<Saved | null>(null);
+  // opening a saved report brings its editor (below the list) into view
+  const editorRef = useRef<HTMLElement>(null);
+  const [scrollToEditor, setScrollToEditor] = useState(false);
+  useEffect(() => {
+    if (!scrollToEditor || !editorRef.current) return;
+    editorRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setScrollToEditor(false);
+  }, [scrollToEditor, def, catalog]);
 
   // the catalog follows the chosen form
   useEffect(() => {
@@ -110,6 +118,7 @@ export function AdminReports() {
       const r = await api<{ reportId: number; name: string; definition: Definition }>(`/admin/reports/saved/${s.reportId}`);
       setDef(r.definition);
       setCurrent({ reportId: r.reportId, name: r.name });
+      setScrollToEditor(true);
       setResult(await api<Result>('/admin/reports/run', { method: 'POST', body: { definition: r.definition } }));
     });
   const runIt = () => act.run(async () => { setResult(await api<Result>('/admin/reports/run', { method: 'POST', body: { definition: def } })); });
@@ -164,7 +173,7 @@ export function AdminReports() {
                 <td className="row-actions">
                   {confirmDelete?.reportId === s.reportId
                     ? <><button className="link danger-link" onClick={() => void remove(s)}>Yes, delete</button><button className="link" onClick={() => setConfirmDelete(null)}>Cancel</button></>
-                    : <button className="link danger-link" onClick={() => setConfirmDelete(s)}>Delete</button>}
+                    : <><button className="link" onClick={() => void openSaved(s)}>Edit</button><button className="link danger-link" onClick={() => setConfirmDelete(s)}>Delete</button></>}
                 </td>
               </tr>
             ))}</tbody>
@@ -180,7 +189,7 @@ export function AdminReports() {
       </section>
 
       {def && catalog && (
-        <section className="card stack">
+        <section className="card stack" ref={editorRef} style={{ scrollMarginTop: '1rem' }}>
           <div className="prev-head">
             <h2 style={{ margin: 0 }}>{current.reportId ? current.name : 'New report'} <span className="muted small">· {catalog.formName}</span></h2>
             <button className="link" onClick={() => { setDef(null); setResult(null); }}>Close</button>
@@ -203,6 +212,7 @@ export function AdminReports() {
 
           <fieldset className="b-auto">
             <legend>Columns</legend>
+            {current.reportId && <p className="hint">To add a field, choose it below and click Add, then Save changes at the bottom.</p>}
             {def.columns.length === 0 && <p className="muted small">Add at least one column.</p>}
             <ol style={{ margin: 0, paddingLeft: '1.2rem' }}>
               {def.columns.map((c, i) => {
