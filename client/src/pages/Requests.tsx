@@ -169,8 +169,8 @@ export function NewRequestPage() {
   const firstStep = form.firstStep ?? null;
   return (
     <form className="card" onSubmit={submit} noValidate>
-      <h1>{form.form.name}</h1>
-      {form.form.description && <p className="muted">{form.form.description}</p>}
+      {/* the form's own layout carries its title: the name is kept for screen readers only */}
+      <h1 className="sr-only">{form.form.name}</h1>
       {copiedFrom && <p className="notice">Pre-filled from {copiedFrom}. This will be a brand-new request - review the details before submitting.</p>}
       {formError && <p className="notice bad" role="alert">{formError}</p>}
       <FieldGrid defs={form.fields}>
