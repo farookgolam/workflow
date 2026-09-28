@@ -35,7 +35,7 @@ const setupBody = z.object({
 const codeHash = (addr: string, code: string) => crypto.createHmac('sha256', config.auth.jwtSecret).update(`${addr}\n${code}`).digest();
 
 /** Which addresses may register here - a per-customer setting, falling back to ALLOWED_EMAIL_DOMAINS. */
-async function assertDomainAllowed(tenantId: number, addr: string): Promise<void> {
+export async function assertDomainAllowed(tenantId: number, addr: string): Promise<void> {
   const allowed = (await effectiveSettings(tenantId)).signup.allowedDomains;
   if (allowed.length && !allowed.includes(addr.split('@')[1])) {
     throw new AppError(403, 'domain_not_allowed', 'Only your organisation\'s email addresses can be used here');

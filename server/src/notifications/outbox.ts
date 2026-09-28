@@ -11,7 +11,8 @@ export type NotificationType =
   | 'Reassigned'
   | 'AdminRejectedAlert'
   | 'AdminUploadFailed'
-  | 'VerificationCode';
+  | 'VerificationCode'
+  | 'AccountCreated';
 
 export interface Recipient {
   userId: number | null;

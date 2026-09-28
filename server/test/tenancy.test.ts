@@ -38,9 +38,12 @@ describe('tenant isolation over the API', () => {
     expect(listA.sort()).toEqual(['shared@example.test', 'submitter@example.test']);
     expect(listB).toEqual(['shared@example.test']);
 
-    // administrators cannot create accounts any more - people register themselves
-    const created = await request(app).post('/api/v1/admin/users').set(bearer(tokenA)).send({ email: 'x@example.test', displayName: 'X', roles: ['Approver'] });
-    expect(created.status).toBe(404);
+    // a person an administrator adds lands in their own organisation only
+    const created = await request(app).post('/api/v1/admin/users').set(bearer(tokenA)).send({ email: 'added@example.test', displayName: 'Added Person', roles: ['Approver'] });
+    expect(created.status).toBe(201);
+    const [where] = await unscopedQuery<{ TenantId: number }>('SELECT TenantId FROM Users WHERE UserId = @Id', { Id: created.body.userId });
+    expect(where.TenantId).toBe(a.tenantId);
+    expect((await request(app).get('/api/v1/admin/users').set(bearer(tokenB))).body.users.map((u: { email: string }) => u.email)).toEqual(['shared@example.test']);
     // and one organisation's admin cannot reset a key in another
     expect((await request(app).post(`/api/v1/admin/users/${bAdminId}/reset-key`).set(bearer(tokenA))).status).toBe(404);
   });

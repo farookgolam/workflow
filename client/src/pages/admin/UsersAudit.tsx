@@ -1,11 +1,114 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { api, download } from '../../api';
+import { api, download, uploadFile } from '../../api';
 import { useAuth } from '../../auth';
 import { fmtDateTime } from '../../fields';
 import { useAction, useLoad, type UserRow } from '../../hooks';
 
 const ROLES = ['Admin', 'Approver', 'Submitter'] as const;
+
+interface ImportRow { row: number; email: string; displayName: string; roles: string[]; status: 'add' | 'added' | 'exists' | 'error'; message?: string }
+interface ImportResult { dryRun: boolean; warnings: string[]; summary: { rows: number; add: number; added: number; exists: number; errors: number }; rows: ImportRow[] }
+
+const STATUS_LABEL: Record<ImportRow['status'], string> = { add: 'Will be added', added: 'Added', exists: 'Skipped', error: 'Problem' };
+
+/** Add one person, or many from an Excel sheet. Nobody gets a key from the admin: each person creates their own. */
+function AddPeople({ onAdded }: { onAdded: () => void }) {
+  const act = useAction();
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [roles, setRoles] = useState<string[]>(['Submitter']);
+  const [sendEmail, setSendEmail] = useState(true);
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<ImportResult | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const addOne = () =>
+    act.run(async () => {
+      await api('/admin/users', { method: 'POST', body: { email: email.trim(), displayName: name.trim(), roles, sendEmail } });
+      const who = email.trim();
+      setEmail(''); setName(''); setRoles(['Submitter']);
+      onAdded();
+      return `${who} was added.${sendEmail ? ' They have been emailed how to sign in.' : ''}`;
+    });
+
+  const importPath = (dryRun: boolean) => `/admin/users/import?dryRun=${dryRun ? 1 : 0}&sendEmail=${sendEmail ? 1 : 0}`;
+  const check = (f: File) =>
+    act.run(async () => {
+      setFile(f);
+      setPreview(await uploadFile<ImportResult>(importPath(true), f));
+    });
+  const confirm = () =>
+    act.run(async () => {
+      const r = await uploadFile<ImportResult>(importPath(false), file!);
+      setPreview(r);
+      setFile(null);
+      if (fileInput.current) fileInput.current.value = '';
+      onAdded();
+      return `${r.summary.added} ${r.summary.added === 1 ? 'person was' : 'people were'} added.`;
+    });
+
+  return (
+    <section className="card stack">
+      <h2>Add people</h2>
+      {act.error && <p className="notice bad" role="alert">{act.error}</p>}
+      {act.ok && <p className="notice ok" role="status">{act.ok}</p>}
+      <label className="check"><input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} /><span>Email each new person how to sign in</span></label>
+
+      <fieldset className="b-auto">
+        <legend>One person</legend>
+        <div className="grid2">
+          <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+          <label>Name<input value={name} onChange={(e) => setName(e.target.value)} /></label>
+        </div>
+        <div style={{ margin: '.5rem 0' }}>
+          {ROLES.map((role) => (
+            <label key={role} className="check inline"><input type="checkbox" checked={roles.includes(role)} onChange={() => setRoles((r) => (r.includes(role) ? r.filter((x) => x !== role) : [...r, role]))} /><span>{role}</span></label>
+          ))}
+        </div>
+        <button className="primary" disabled={act.busy || !email.trim() || name.trim().length < 2 || roles.length === 0} onClick={() => void addOne()}>Add person</button>
+      </fieldset>
+
+      <fieldset className="b-auto">
+        <legend>Many people from Excel</legend>
+        <p className="hint" style={{ marginTop: 0 }}>A sheet with the headings <strong>Email</strong>, <strong>Name</strong> and <strong>Roles</strong> (Submitter, Approver or Admin; several separated by commas; empty means Submitter). People already in the list are skipped.</p>
+        <div className="actions">
+          <button type="button" onClick={() => void act.run(() => download('/admin/users/import-template', 'users-import-template.xlsx'))}>Download template</button>
+          <input ref={fileInput} type="file" accept=".xlsx" aria-label="Excel file of people to add" disabled={act.busy} onChange={(e) => { const f = e.target.files?.[0]; setPreview(null); if (f) void check(f); }} />
+        </div>
+        {preview && (
+          <div className="stack" style={{ marginTop: '.75rem' }}>
+            {preview.warnings.map((w) => <p key={w} className="notice">{w}</p>)}
+            <p>
+              {preview.dryRun
+                ? <><strong>{preview.summary.add}</strong> to add · {preview.summary.exists} already users (skipped) · {preview.summary.errors} with problems (skipped)</>
+                : <><strong>{preview.summary.added}</strong> added · {preview.summary.exists} skipped · {preview.summary.errors} with problems</>}
+            </p>
+            <div style={{ maxHeight: 360, overflow: 'auto' }}>
+              <table>
+                <thead><tr><th>Row</th><th>Email</th><th>Name</th><th>Roles</th><th>Result</th></tr></thead>
+                <tbody>{preview.rows.map((r) => (
+                  <tr key={r.row} className={r.status === 'error' ? 'inactive' : ''}>
+                    <td>{r.row}</td><td>{r.email}</td><td>{r.displayName}</td><td>{r.roles.join(', ')}</td>
+                    <td>{r.status === 'error' ? <span className="field-error">{r.message}</span> : <>{STATUS_LABEL[r.status]}{r.message && r.status !== 'exists' ? ` - ${r.message}` : ''}</>}</td>
+                  </tr>))}
+                </tbody>
+              </table>
+            </div>
+            {preview.dryRun && (
+              <div className="actions">
+                <button className="primary" disabled={act.busy || preview.summary.add === 0} onClick={() => void confirm()}>
+                  {act.busy ? 'Adding…' : `Add ${preview.summary.add} ${preview.summary.add === 1 ? 'person' : 'people'}`}
+                </button>
+                <button onClick={() => { setPreview(null); setFile(null); if (fileInput.current) fileInput.current.value = ''; }}>Cancel</button>
+              </div>
+            )}
+          </div>
+        )}
+      </fieldset>
+    </section>
+  );
+}
 
 export function AdminUsers() {
   const { user: me } = useAuth();
@@ -55,6 +158,7 @@ export function AdminUsers() {
           </table>
         )}
       </section>
+      <AddPeople onAdded={reload} />
       {resetting && (
         <section className="card reject-box">
           <h2>Reset {resetting.displayName}'s password key?</h2>
@@ -67,7 +171,7 @@ export function AdminUsers() {
       )}
       <section className="card">
         <h2>How people get an account</h2>
-        <p className="muted" style={{ margin: 0 }}>You do not create users. Anyone signs in with their work email and creates their own 6-digit password key the first time; they appear here as a <strong>Submitter</strong>. Tick <strong>Approver</strong> for people who should approve requests - they must have signed in once before you can choose them in an approval chain. People who forget their key can reset it themselves from the sign-in page (a code is emailed to them). <strong>Reset password key</strong> is your fallback, for example when someone cannot use that route or you want to force a new key.</p>
+        <p className="muted" style={{ margin: 0 }}>Add people above - one at a time or from an Excel sheet - with their roles; they show <strong>No key yet</strong> until they first sign in. Anyone can also just sign in with their work email; they appear here as a <strong>Submitter</strong>. Either way, each person creates their own 6-digit password key the first time, after confirming their email - you never set or see anyone's key. Tick <strong>Approver</strong> for people who should approve requests - they must have signed in once before you can choose them in an approval chain. People who forget their key can reset it themselves from the sign-in page (a code is emailed to them). <strong>Reset password key</strong> is your fallback, for example when someone cannot use that route or you want to force a new key.</p>
       </section>
     </div>
   );
