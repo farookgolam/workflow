@@ -9,6 +9,8 @@ export type NotificationType =
   | 'FinalApproved'
   | 'Cancelled'
   | 'Reassigned'
+  | 'SentBack'
+  | 'Resubmitted'
   | 'AdminRejectedAlert'
   | 'AdminUploadFailed'
   | 'VerificationCode'
@@ -21,14 +23,38 @@ export interface Recipient {
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
+export type EmailLine =
+  | string
+  | { label: string; value: string }
+  | { link: string; text: string }
+  /** a row of big buttons, e.g. Approve / Reject */
+  | { buttons: { link: string; text: string; tone: 'ok' | 'bad' | 'plain' }[] }
+  /** a two-column table of values, e.g. the submitted form; nothing at all when empty */
+  | { details: { label: string; value: string }[]; title?: string };
+
+const TONE = { ok: '#15803d', bad: '#b91c1c', plain: '#475569' } as const;
+
 /** Tiny HTML builder: every interpolated value is escaped; links are passed separately. */
-export function emailBody(lines: (string | { label: string; value: string } | { link: string; text: string })[]): string {
+export function emailBody(lines: EmailLine[]): string {
   return lines
     .map((l) => {
       if (typeof l === 'string') return `<p>${esc(l)}</p>`;
+      if ('buttons' in l) {
+        return `<p>${l.buttons
+          .map((b) => `<a href="${esc(b.link)}" style="display:inline-block;padding:10px 22px;margin:0 8px 8px 0;border-radius:6px;background:${TONE[b.tone]};color:#ffffff;font-weight:bold;text-decoration:none">${esc(b.text)}</a>`)
+          .join('')}</p>`;
+      }
+      if ('details' in l) {
+        if (!l.details.length) return '';
+        const rows = l.details
+          .map((d) => `<tr><td style="padding:4px 16px 4px 0;color:#475569;vertical-align:top">${esc(d.label)}</td><td style="padding:4px 0;vertical-align:top">${esc(d.value)}</td></tr>`)
+          .join('');
+        return `${l.title ? `<p><strong>${esc(l.title)}</strong></p>` : ''}<table style="border-collapse:collapse;margin:0 0 12px">${rows}</table>`;
+      }
       if ('link' in l) return `<p><a href="${esc(l.link)}">${esc(l.text)}</a></p>`;
       return `<p><strong>${esc(l.label)}:</strong> ${esc(l.value)}</p>`;
     })
+    .filter(Boolean)
     .join('\n');
 }
 

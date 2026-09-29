@@ -4,7 +4,7 @@ module.exports = {
   subtitle: 'Configuring forms, approval chains and users, and overseeing requests',
   audience:
     'This manual is for people with the Admin role. It covers the administrator portal: the dashboard, request oversight and actions, form and approval-chain configuration, reports, user management and the audit log. Server installation is covered separately in docs/DEPLOYMENT-IIS.md. Everyday submitting and approving is covered in the User Manual.',
-  version: '1.2',
+  version: '1.3',
   date: 'September 2026',
   blocks: [
     { h1: 'Overview' },
@@ -60,7 +60,7 @@ module.exports = {
     { h1: 'Dashboard' },
     { p: 'The dashboard opens when you choose **Dashboard**. Each tile is a link to the request list with the matching filter applied.' },
     { table: { widths: [0.24, 0.76], head: ['Tile', 'Counts'], rows: [
-      ['In progress', 'Requests waiting on an approver.'],
+      ['In progress', 'Requests waiting on an approver, or sent back to the submitter for changes.'],
       ['Approved', 'Requests approved at every step.'],
       ['Rejected', 'Requests rejected at some step.'],
       ['Overdue', 'In-progress requests whose current step has passed its due date (the step\'s "Remind after" days, or "Escalate after" if no reminder is set). Steps with neither never become overdue. Highlighted when above zero.'],
@@ -86,14 +86,14 @@ module.exports = {
     { h2: 'The request detail page' },
     { ul: [
       '**Actions** - the buttons described below, and the archive panel (whether the PDF is stored, and its size).',
-      '**Timeline** - the submission with all its data, then each step: status, who it is assigned to, delegate, waiting-since and due dates, and once decided: who acted, when, from which IP address, the fields they entered, their comments, their **signature** (on approved steps) and any documents they attached, which you can download.',
+      '**Timeline** - the submission with all its data, then each step: status, who it is assigned to, delegate, waiting-since and due dates, and once decided: who acted, when, from which IP address, the fields they entered, their comments, their **signature** (on approved steps) and any documents they attached, which you can download. A step that sent the request back shows each round in a purple box: who sent it back and why, and - once resubmitted - when, the submitter\'s note and exactly which values changed.',
       '**Emails** - every notification for this request with its delivery status and any error.',
       '**Audit trail** - every event for this request with user, time and IP address.',
     ] },
     { h2: 'Send reminder' },
-    { p: 'Emails the current approver (and delegate, if any) a reminder containing a **fresh link**; their earlier link stops working. Use it when an approver says their link expired. Available only while the request is in progress.' },
+    { p: 'Emails the current approver (and delegate, if any) a reminder containing a **fresh link**; their earlier link stops working. Use it when an approver says their link expired. Available only while the request is in progress, and not while it is sent back: then it is waiting on the submitter, and the request list shows **<submitter> (sent back for changes)** under Waiting on.' },
     { h2: 'Reassign and delegate' },
-    { p: 'In the Timeline, choose **Reassign...** on any step that is Active or Waiting, pick an approver, and choose **Save**.' },
+    { p: 'In the Timeline, choose **Reassign...** on any step that is Active, Waiting or Sent back, pick an approver, and choose **Save**. Reassigning a Sent back step changes who gets it when the submitter resubmits.' },
     { table: { widths: [0.3, 0.7], head: ['Option', 'Effect'], rows: [
       ['Reassign (box unticked)', 'The new person **replaces** the approver. The previous approver\'s link stops working and they can no longer act. If the step is active, the new approver is emailed a link immediately.'],
       ['As delegate (box ticked)', 'The original approver **keeps** the step and the delegate can act too. Whoever decides first is recorded; the PDF and audit log show who actually acted.'],
@@ -501,7 +501,8 @@ module.exports = {
       ['auth.password_changed', 'A user changed their own password key.'],
       ['auth.key_reset_requested / auth.key_reset_self', 'A user asked for a forgotten-key code / chose a new key with it.'],
       ['request.submitted / approved / rejected / cancelled', 'Request lifecycle, with from and to states.'],
-      ['step.activated / approved / rejected', 'Step lifecycle. Detail shows asDelegate, viaLink and selfApproval when they apply.'],
+      ['step.activated / approved / rejected', 'Step lifecycle. Detail shows asDelegate, viaLink and selfApproval when they apply. A step activated again after a resubmit shows Returned > Active.'],
+      ['step.returned / request.resubmitted', 'An approver sent the request back for changes (with the reason) / the submitter resubmitted it (with the fields they changed).'],
       ['attachment.added / removed / downloaded', 'An approver attached or removed a document on their step, or somebody downloaded one.'],
       ['step.reassigned / step.delegated', 'Administrator changed who can act.'],
       ['step.reminder_sent / step.escalated', 'Manual or scheduled reminder; escalation (user "System" when automatic).'],
@@ -542,7 +543,9 @@ module.exports = {
     { h1: 'Notifications, reminders and escalation' },
     { table: { widths: [0.3, 0.26, 0.44], head: ['Email', 'To', 'Sent when'], rows: [
       ['Submission received', 'Submitter', 'A request is submitted.'],
-      ['Approval needed', 'Approver', 'Their step becomes active.'],
+      ['Approval needed', 'Approver', 'Their step becomes active. Lists the request details (unless turned off in Settings) with Approve, Send back and Reject buttons.'],
+      ['Changes needed', 'Submitter', 'An approver sends the request back. Includes what to change and a Make the changes button.'],
+      ['Resubmitted for approval', 'Approver who sent it back', 'The submitter resubmits. Lists exactly what changed and their note.'],
       ['Approval needed (reassigned)', 'New approver or delegate', 'An admin reassigns or delegates an active step.'],
       ['Reminder', 'Approver and delegate', 'Admin chooses Send reminder, or the reminder rule is due.'],
       ['Escalation', 'Escalation user or admins', 'The step passes its "Escalate after" days. Once per step.'],
@@ -579,6 +582,7 @@ module.exports = {
 
     { h2: 'Email sender' },
     { p: 'The **From name** and **From address** your notifications are sent as - approval requests, reminders, decisions and verification codes. The page shows the address currently in use. Ask your IT team before changing it: a mail server normally refuses to send as an address it is not authorised for, and messages that do go out may be treated as spam. The mail server itself is an installation-wide setting and is not on this page.' },
+    { p: '**Show the request\'s details in approval emails** (on unless you turn it off): approval, reminder and resubmitted emails list what was submitted - up to 12 fields, with signatures shown as Signed and tables as a row count - above the Approve, Send back and Reject buttons, so approvers can see what a request is about before they open it. Turn it off if your forms hold information that should not travel by email (salaries, health or ID details). The buttons stay either way, and nothing is decided until the approver confirms on the page.' },
 
 
     { h1: 'Common tasks and troubleshooting' },
@@ -591,6 +595,8 @@ module.exports = {
       ['User cannot sign in', 'Locked: wait 15 minutes, or they use **Forgot your key?** (which unlocks). Inactive: **Reactivate**. Verification code not arriving: ask them to check junk mail and to request a new code after a minute; if nobody receives codes, the mail server needs attention from IT.'],
       ['Someone needs to approve but is not in the approver list', 'They must sign in once; then tick **Approver** for them on the Users page.'],
       ['Request submitted by mistake', '**Cancel request...** with a reason. The submitter can submit again.'],
+      ['A request has been "sent back for changes" for a long time', 'It is waiting on the submitter, not an approver, so no reminders go out. Contact the submitter (their name is on the request page), or **Cancel request...** if it is no longer wanted.'],
+      ['Submitter cannot resubmit: "This form has been deleted"', 'The form was deleted while the request was with them. Cancel the request; they can submit a new one on another form.'],
       ['Submitter wants a rejection reversed', 'Not possible. They start a new request; "start a new request using these details" on the rejected request pre-fills it.'],
       ['Wrong approver on in-flight requests after a chain change', 'Expected: in-flight requests keep their original chain. **Reassign** the affected steps.'],
       ['Form is missing for submitters', 'It must be **Active** and have a **published chain** with active approvers.'],

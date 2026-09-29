@@ -87,12 +87,12 @@ adminRequestListRouter.get('/', async (req, res) => {
   const rows = await tenantQuery<Record<string, any>>(
     req.user!.tenantId,
     `SELECT r.RequestId, r.RequestNumber, f.Name AS FormName, r.Status, r.ArchiveStatus, r.CurrentStepOrder, r.TotalSteps, r.SubmittedAt, r.ClosedAt,
-            su.DisplayName AS SubmitterName, cu.DisplayName AS WaitingOn, cs.DueAt,
-            CASE WHEN cs.DueAt < SYSUTCDATETIME() THEN 1 ELSE 0 END AS IsOverdue, COUNT(*) OVER () AS Total
+            su.DisplayName AS SubmitterName, CASE WHEN cs.Status = 'Returned' THEN su.DisplayName + N' (sent back for changes)' ELSE cu.DisplayName END AS WaitingOn, cs.DueAt,
+            CASE WHEN cs.Status = 'Active' AND cs.DueAt < SYSUTCDATETIME() THEN 1 ELSE 0 END AS IsOverdue, COUNT(*) OVER () AS Total
        FROM Requests r
        JOIN Forms f ON f.TenantId = r.TenantId AND f.FormId = r.FormId
        JOIN Users su ON su.TenantId = r.TenantId AND su.UserId = r.SubmitterUserId
-       LEFT JOIN RequestSteps cs ON cs.TenantId = r.TenantId AND cs.RequestId = r.RequestId AND cs.Status = 'Active'
+       LEFT JOIN RequestSteps cs ON cs.TenantId = r.TenantId AND cs.RequestId = r.RequestId AND cs.Status IN ('Active','Returned')
        LEFT JOIN Users cu ON cu.TenantId = cs.TenantId AND cu.UserId = cs.AssignedUserId
       WHERE ${where.join(' AND ')}
       ORDER BY r.SubmittedAt DESC, r.RequestId DESC
@@ -168,7 +168,7 @@ adminRequestListRouter.post('/:id/remind', async (req, res) => {
     `SELECT RequestStepId FROM RequestSteps WHERE TenantId = @TenantId AND RequestId = @R AND Status = 'Active'`,
     { R: idParam(req.params.id) },
   );
-  if (!active) throw new AppError(409, 'step_not_active', 'This request has no step awaiting a decision');
+  if (!active) throw new AppError(409, 'step_not_active', 'This request has no step awaiting a decision (if it was sent back, it is waiting on the submitter)');
   await remindStep(tenantId, actorFrom(req), active.RequestStepId, 'manual');
   res.status(204).end();
 });

@@ -5,18 +5,20 @@ import { ApiError, api, download } from '../api';
 import { FieldGrid, FieldInput, StatusBadge, ValueList, applyLookups, fmtDateTime, initialValues, toPayload, withLookupOptions, type FieldDef, type FieldValue, type GridValue, type Lookups, type Values } from '../fields';
 import { NextApproverPicker, choicePayload, needsChoice, type StepHandOff } from '../approvers';
 import { useLoad } from '../hooks';
+import { waitedFor } from '../dates';
+import { ChangeList, type SendBack } from '../sendback';
 
-/** Compact "● ● ◐ ○" tracker: one segment per approval step. */
-export function StepDots({ total, current, status, rejectedAt }: { total: number; current: number | null; status: string; rejectedAt?: number | null }) {
+/** Compact "● ● ◐ ○" tracker: one segment per approval step. `back`: the current step sent it back for changes. */
+export function StepDots({ total, current, status, rejectedAt, back }: { total: number; current: number | null; status: string; rejectedAt?: number | null; back?: boolean }) {
   return (
-    <span className="dots" role="img" aria-label={current ? `Step ${current} of ${total}` : status}>
+    <span className="dots" role="img" aria-label={current ? `Step ${current} of ${total}${back ? ', sent back for changes' : ''}` : status}>
       {Array.from({ length: total }, (_, i) => {
         const n = i + 1;
         const state =
           status === 'Approved' ? 'done'
           : status === 'Rejected' ? (n < (rejectedAt ?? 0) ? 'done' : n === rejectedAt ? 'bad' : 'todo')
           : status === 'Cancelled' ? 'todo'
-          : n < (current ?? 0) ? 'done' : n === current ? 'now' : 'todo';
+          : n < (current ?? 0) ? 'done' : n === current ? (back ? 'back' : 'now') : 'todo';
         return <i key={n} className={`dot dot-${state}`} />;
       })}
     </span>
@@ -25,7 +27,8 @@ export function StepDots({ total, current, status, rejectedAt }: { total: number
 
 interface MyRow {
   requestId: number; requestNumber: string; formId: number; formName: string; status: string; currentStep: number | null; currentStepName: string | null;
-  totalSteps: number; waitingOn: string | null; submittedAt: string; closedAt: string | null;
+  totalSteps: number; waitingOn: string | null; waitingSince: string | null; submittedAt: string; closedAt: string | null;
+  sentBack: { reason: string; returnedBy: string; returnedAt: string } | null;
   rejection: { reason: string; stepOrder: number; stepName: string } | null; pdfAvailable: boolean;
 }
 
@@ -43,7 +46,7 @@ export function MySubmissions() {
       <div className="prev-head" style={{ marginBottom: '1rem' }}>
         <h2 style={{ margin: 0 }}>My submissions</h2>
         <div className="seg" role="group" aria-label="Filter by status">
-          {[['', 'All'], ['InProgress', 'In progress'], ['Approved', 'Approved'], ['Rejected', 'Rejected']].map(([v, label]) => (
+          {[['', 'All'], ['Returned', 'Needs my changes'], ['InProgress', 'In progress'], ['Approved', 'Approved'], ['Rejected', 'Rejected']].map(([v, label]) => (
             <button key={v} className={status === v ? 'on' : ''} onClick={() => go({ status: v, page: '' })}>{label}</button>
           ))}
         </div>
@@ -60,9 +63,10 @@ export function MySubmissions() {
                   <Link to={`/requests/${r.requestId}`} className="sub-title">{r.requestNumber}</Link>
                   <span className="muted"> · {r.formName} · {fmtDateTime(r.submittedAt)}</span>
                   <div className="sub-progress">
-                    <StepDots total={r.totalSteps} current={r.currentStep} status={r.status} rejectedAt={r.rejection?.stepOrder} />
+                    <StepDots total={r.totalSteps} current={r.currentStep} status={r.status} rejectedAt={r.rejection?.stepOrder} back={!!r.sentBack} />
                     <span className="small">
-                      {r.status === 'InProgress' && <>Step {r.currentStep} of {r.totalSteps} ({r.currentStepName}), waiting on <strong>{r.waitingOn}</strong></>}
+                      {r.status === 'InProgress' && r.sentBack && <><strong>Sent back to you</strong> by {r.sentBack.returnedBy}: {r.sentBack.reason} · <Link to={`/requests/${r.requestId}/edit`}>Make the changes</Link></>}
+                      {r.status === 'InProgress' && !r.sentBack && <>Step {r.currentStep} of {r.totalSteps} ({r.currentStepName}), waiting on <strong>{r.waitingOn}</strong>{r.waitingSince && <span className="muted"> for {waitedFor(r.waitingSince)}</span>}</>}
                       {r.status === 'Approved' && <>All {r.totalSteps} steps approved · {fmtDateTime(r.closedAt)}</>}
                       {r.status === 'Rejected' && r.rejection && <span className="field-error">Rejected at step {r.rejection.stepOrder} ({r.rejection.stepName}): {r.rejection.reason}</span>}
                       {r.status === 'Cancelled' && <>Cancelled by an administrator</>}
@@ -70,7 +74,7 @@ export function MySubmissions() {
                   </div>
                 </div>
                 <div className="sub-side">
-                  <StatusBadge status={r.status} />
+                  <StatusBadge status={r.sentBack ? 'Returned' : r.status} />
                   {r.pdfAvailable && (
                     <button className="link" onClick={() => { setPdfError(''); download(`/my/requests/${r.requestId}/pdf`, `${r.requestNumber}.pdf`).catch((e) => setPdfError(e.message)); }}>
                       {r.status === 'Rejected' ? 'Archived PDF' : 'Final PDF'}
@@ -96,10 +100,33 @@ export function MySubmissions() {
 // ---------------------------------------------------------------------------------------
 interface MyRequestDetail {
   requestId: number; requestNumber: string; formId: number; formName: string; status: string; submittedAt: string; closedAt: string | null;
-  progress: { currentStep: number | null; totalSteps: number; waitingOn: string | null; label: string };
+  progress: { currentStep: number | null; totalSteps: number; waitingOn: string | null; waitingSince: string | null; label: string };
+  sentBack: { stepOrder: number; stepName: string; returnedBy: string; returnedAt: string; reason: string } | null;
+  returns: SendBack[];
   rejection: { reason: string; stepOrder: number; stepName: string | null; rejectedBy: string | null; rejectedAt: string | null } | null;
   cancelReason: string | null; pdfAvailable: boolean; data: FieldValue[];
-  steps: { stepOrder: number; name: string; status: string; approver: string; actedAt: string | null; comments?: string | null; responses?: FieldValue[] }[];
+  steps: { stepOrder: number; name: string; status: string; approver: string; activatedAt: string | null; actedAt: string | null; comments?: string | null; responses?: FieldValue[] }[];
+}
+
+/**
+ * Values for the form from an earlier submission's stored values. Fields that no longer exist or changed type are
+ * skipped, and a drawn signature is never carried over: it has to be made again for what is being sent now.
+ */
+function valuesFrom(fields: FieldDef[], data: FieldValue[]): Values {
+  const next: Values = {};
+  for (const def of fields) {
+    const old = data.find((d) => d.key === def.key && d.type === def.type);
+    if (old?.value == null || def.type === 'sigpad') continue;
+    if (def.type === 'checkbox') next[def.key] = old.value === 'true';
+    else if (def.type === 'multiselect') { try { next[def.key] = JSON.parse(old.value) as string[]; } catch { /* skip */ } }
+    else if (def.type === 'grid') {
+      // only what was typed into columns that still exist; calculated cells are worked out again
+      const cols = (def.props?.columns ?? []).filter((c) => c.type !== 'calc');
+      try { next[def.key] = (JSON.parse(old.value) as GridValue).rows.map((r) => Object.fromEntries(cols.filter((c) => r[c.key] != null).map((c) => [c.key, r[c.key] as string]))); } catch { /* skip */ }
+    }
+    else next[def.key] = old.value;
+  }
+  return next;
 }
 
 export function NewRequestPage() {
@@ -127,20 +154,7 @@ export function NewRequestPage() {
       // Pre-fill from one of MY earlier requests (the API only returns my own). Fields that no longer exist or changed type are skipped.
       const prev = (await api<{ request: MyRequestDetail }>(`/my/requests/${from}`).catch(() => null))?.request;
       if (!live || !prev) return;
-      const next: Values = {};
-      for (const def of f.fields) {
-        const old = prev.data.find((d) => d.key === def.key && d.type === def.type);
-        if (old?.value == null || def.type === 'sigpad') continue; // a signature is never copied: it has to be made again
-        if (def.type === 'checkbox') next[def.key] = old.value === 'true';
-        else if (def.type === 'multiselect') { try { next[def.key] = JSON.parse(old.value) as string[]; } catch { /* skip */ } }
-        else if (def.type === 'grid') {
-          // only what was typed into columns that still exist; calculated cells are worked out again
-          const cols = (def.props?.columns ?? []).filter((c) => c.type !== 'calc');
-          try { next[def.key] = (JSON.parse(old.value) as GridValue).rows.map((r) => Object.fromEntries(cols.filter((c) => r[c.key] != null).map((c) => [c.key, r[c.key] as string]))); } catch { /* skip */ }
-        }
-        else next[def.key] = old.value;
-      }
-      setValues(applyLookups(f.fields, next, f.lookups));
+      setValues(applyLookups(f.fields, valuesFrom(f.fields, prev.data), f.lookups));
       setCopiedFrom(prev.requestNumber);
     })().catch(() => live && setFormError('This form is not available.'));
     return () => void (live = false);
@@ -185,6 +199,96 @@ export function NewRequestPage() {
   );
 }
 
+/** Edit a request an approver sent back, then resubmit it: /requests/:requestId/edit */
+export function ResubmitPage() {
+  const { requestId } = useParams();
+  const navigate = useNavigate();
+  const [req, setReq] = useState<MyRequestDetail | null>(null);
+  const [form, setForm] = useState<{ fields: FieldDef[]; lookups?: Lookups } | null>(null);
+  const [values, setValues] = useState<Values>({});
+  const [note, setNote] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const [{ request }, loaded] = await Promise.all([
+        api<{ request: MyRequestDetail }>(`/my/requests/${requestId}`),
+        api<{ fields: FieldDef[]; lookups?: Lookups }>(`/my/requests/${requestId}/form`),
+      ]);
+      if (!live) return;
+      const fields = withLookupOptions(loaded.fields, loaded.lookups);
+      setReq(request);
+      setForm({ fields, lookups: loaded.lookups });
+      setValues(applyLookups(fields, { ...initialValues(fields), ...valuesFrom(fields, request.data) }, loaded.lookups));
+    })().catch(() => live && setLoadError('This request could not be opened.'));
+    return () => void (live = false);
+  }, [requestId]);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!form) return;
+    setBusy(true);
+    setErrors({});
+    setFormError('');
+    try {
+      await api(`/my/requests/${requestId}/resubmit`, { method: 'POST', body: { values: toPayload(form.fields, values), note: note.trim() || undefined } });
+      navigate(`/requests/${requestId}?resubmitted=1`, { replace: true });
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'validation_failed') {
+        setErrors(err.fieldErrors);
+        setFormError('Please fix the highlighted fields.');
+      } else setFormError(err instanceof ApiError ? err.message : 'Something went wrong. Nothing was resubmitted.');
+      setBusy(false);
+    }
+  };
+
+  if (loadError) return <div className="card"><p className="notice bad">{loadError}</p><Link to={'/'}>Back</Link></div>;
+  if (!req || !form) return <p className="muted center">Loading…</p>;
+  if (!req.sentBack) {
+    return (
+      <div className="card">
+        <p className="notice">{req.requestNumber} is not waiting for changes from you, so there is nothing to edit.</p>
+        <Link to={`/requests/${req.requestId}`}>View the request</Link>
+      </div>
+    );
+  }
+  const hasSignature = form.fields.some((f) => f.type === 'sigpad');
+  return (
+    <form className="stack" onSubmit={submit} noValidate>
+      <div className="page-head">
+        <div>
+          <p className="eyebrow">{req.formName} · {req.requestNumber}</p>
+          <h1>Make changes and resubmit</h1>
+        </div>
+        <StatusBadge status="Returned" />
+      </div>
+      <div className="notice back">
+        <p style={{ marginTop: 0 }}><strong>{req.sentBack.returnedBy} asked for these changes</strong> on {fmtDateTime(req.sentBack.returnedAt)}:</p>
+        <blockquote style={{ marginBottom: 0 }}>{req.sentBack.reason}</blockquote>
+      </div>
+      <section className="card">
+        {formError && <p className="notice bad" role="alert">{formError}</p>}
+        {hasSignature && <p className="notice">Signatures are not carried over: please sign again.</p>}
+        <FieldGrid defs={form.fields}>
+          {(f) => <FieldInput def={f} value={values[f.key]} error={errors[f.key]} disabled={busy} onChange={(v) => setValues((s) => applyLookups(form.fields, { ...s, [f.key]: v }, form.lookups))} />}
+        </FieldGrid>
+        <div className="field" style={{ marginTop: '1rem' }}>
+          <label htmlFor="note">Note for {req.sentBack.returnedBy} (optional)</label>
+          <textarea id="note" rows={2} maxLength={2000} value={note} disabled={busy} onChange={(e) => setNote(e.target.value)} placeholder="What did you change?" />
+        </div>
+        <div className="actions">
+          <button className="primary" type="submit" disabled={busy}>{busy ? 'Resubmitting…' : `Resubmit to ${req.sentBack.returnedBy}`}</button>
+          <Link to={`/requests/${req.requestId}`}>Cancel</Link>
+        </div>
+      </section>
+    </form>
+  );
+}
+
 export function RequestPage() {
   const { requestId } = useParams();
   const [params] = useSearchParams();
@@ -204,11 +308,20 @@ export function RequestPage() {
           <h1>{r.requestNumber}</h1>
           <p className="muted">Submitted {fmtDateTime(r.submittedAt)}{r.closedAt && ` · closed ${fmtDateTime(r.closedAt)}`}</p>
         </div>
-        <StatusBadge status={r.status} />
+        <StatusBadge status={r.sentBack ? 'Returned' : r.status} />
       </div>
 
       {params.get('submitted') && r.status === 'InProgress' && <p className="notice ok" role="status">Submitted. We have emailed you a confirmation and notified the first approver.</p>}
-      {r.status === 'InProgress' && <p className="notice"><strong>{r.progress.label}.</strong> You will be emailed when a final decision is made.</p>}
+      {params.get('resubmitted') && r.status === 'InProgress' && !r.sentBack && <p className="notice ok" role="status">Resubmitted. {r.progress.waitingOn} has been emailed and can decide now.</p>}
+      {r.sentBack && (
+        <div className="notice back">
+          <p style={{ marginTop: 0 }}><strong>{r.sentBack.returnedBy} sent this back to you for changes</strong> on {fmtDateTime(r.sentBack.returnedAt)} (step {r.sentBack.stepOrder}, {r.sentBack.stepName}):</p>
+          <blockquote>{r.sentBack.reason}</blockquote>
+          <p>Steps already approved stay approved. When you resubmit, it goes straight back to {r.sentBack.returnedBy}.</p>
+          <div className="actions" style={{ marginBottom: 0 }}><Link className="button primary" to={`/requests/${r.requestId}/edit`}>Make the changes</Link></div>
+        </div>
+      )}
+      {r.status === 'InProgress' && !r.sentBack && <p className="notice"><strong>{r.progress.label}</strong>{r.progress.waitingSince && <> for {waitedFor(r.progress.waitingSince)}</>}. You will be emailed when a final decision is made.</p>}
       {r.status === 'Approved' && <p className="notice ok"><strong>Fully approved.</strong> All {r.progress.totalSteps} approval steps are complete.</p>}
       {r.rejection && (
         <div className="notice bad">
@@ -232,19 +345,40 @@ export function RequestPage() {
       <section className="card">
         <h2>Progress</h2>
         <ol className="stepper">
-          {r.steps.map((s) => (
-            <li key={s.stepOrder} className={`stepper-${s.status.toLowerCase()}`}>
-              <span className="stepper-n">{s.status === 'Approved' ? '✓' : s.status === 'Rejected' ? '✕' : s.stepOrder}</span>
-              <div>
-                <div className="prev-head"><strong>{s.name}</strong><StatusBadge status={s.status} /></div>
-                <p className="muted small" style={{ margin: 0 }}>
-                  {s.status === 'Active' ? `Waiting on ${s.approver}` : s.actedAt ? `${s.approver} · ${fmtDateTime(s.actedAt)}` : s.approver}
-                </p>
-                {s.responses && s.responses.length > 0 && <div style={{ marginTop: '.5rem' }}><ValueList items={s.responses} /></div>}
-                {s.comments && <blockquote>{s.comments}</blockquote>}
-              </div>
-            </li>
-          ))}
+          <li className="stepper-submitted">
+            <span className="stepper-n">✓</span>
+            <div>
+              <div className="prev-head"><strong>Submitted</strong></div>
+              <p className="muted small" style={{ margin: 0 }}>{fmtDateTime(r.submittedAt)}</p>
+            </div>
+          </li>
+          {r.steps.map((s) => {
+            const backs = r.returns.filter((x) => x.stepOrder === s.stepOrder);
+            return (
+              <li key={s.stepOrder} className={`stepper-${s.status.toLowerCase()}`}>
+                <span className="stepper-n">{s.status === 'Approved' ? '✓' : s.status === 'Rejected' ? '✕' : s.status === 'Returned' ? '↩' : s.stepOrder}</span>
+                <div>
+                  <div className="prev-head"><strong>{s.name}</strong><StatusBadge status={s.status} /></div>
+                  <p className="muted small" style={{ margin: 0 }}>
+                    {s.status === 'Active' ? <>Waiting on <strong>{s.approver}</strong>{s.activatedAt && ` since ${fmtDateTime(s.activatedAt)} (${waitedFor(s.activatedAt)})`}</>
+                      : s.status === 'Returned' ? `Sent back to you by ${r.sentBack?.returnedBy ?? s.approver} - waiting for your changes`
+                      : s.actedAt ? `${s.approver} · ${fmtDateTime(s.actedAt)}` : s.approver}
+                  </p>
+                  {/* earlier rounds at this step: what was asked, and what you changed */}
+                  {backs.filter((x) => x.resubmittedAt).map((x, i) => (
+                    <details key={i} className="small" style={{ marginTop: '.4rem' }}>
+                      <summary>Sent back by {x.returnedBy} on {fmtDateTime(x.returnedAt)}, resubmitted {fmtDateTime(x.resubmittedAt)}</summary>
+                      <blockquote>{x.reason}</blockquote>
+                      {x.resubmitNote && <p style={{ margin: '.25rem 0' }}>Your note: {x.resubmitNote}</p>}
+                      <ChangeList changes={x.changes} />
+                    </details>
+                  ))}
+                  {s.responses && s.responses.length > 0 && <div style={{ marginTop: '.5rem' }}><ValueList items={s.responses} /></div>}
+                  {s.comments && <blockquote>{s.comments}</blockquote>}
+                </div>
+              </li>
+            );
+          })}
         </ol>
       </section>
       <section className="card">

@@ -3,6 +3,7 @@ import PDFDocument from 'pdfkit';
 import { config } from '../config';
 import { SIG_H, SIG_W, parseSignature, sigPathData } from '../forms/sigpad';
 import type { GridValue } from '../forms/validation';
+import { emailValue } from '../workflow/emailDetails';
 import type { FieldValue, RequestDetail } from '../workflow/read';
 
 export interface AuditRow {
@@ -228,6 +229,24 @@ export function buildRequestPdf(d: RequestDetail, auditRows: AuditRow[], brand?:
     ensure(20);
     doc.font(FONT.italic).fontSize(9).fillColor(COLORS.muted)
       .text(`Not reached because of the rejection: ${notReached.map((s) => `step ${s.stepOrder} (${s.name}, ${s.assignedTo})`).join('; ')}.`, M.left, doc.y, { width });
+  }
+
+  // ---- send-backs: each time an approver returned it for changes, and what the submitter changed ----
+  if (d.returns.length) {
+    heading('Sent back for changes');
+    for (const x of d.returns) {
+      ensure(60);
+      row('Sent back', `${fmt(x.returnedAt)} by ${x.returnedBy} at step ${x.stepOrder} (${x.stepName})`);
+      row('What to change', x.reason);
+      row('Resubmitted', x.resubmittedAt ? fmt(x.resubmittedAt) : '-');
+      if (x.resubmitNote) row('Submitter\'s note', x.resubmitNote);
+      if (x.resubmittedAt) {
+        row('Changed', x.changes.length
+          ? x.changes.map((c) => `${c.label}: ${emailValue(c.type, c.from) ?? '(empty)'} > ${emailValue(c.type, c.to) ?? '(empty)'}`).join('\n')
+          : 'Nothing');
+      }
+      doc.moveDown(0.5);
+    }
   }
 
   // ---- audit summary ----

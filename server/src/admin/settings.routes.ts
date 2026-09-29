@@ -15,6 +15,7 @@ export const settingsPatchBody = z
     firstLoginEmailVerification: z.boolean().nullable(),
     mailFromName: z.string().trim().max(200).nullable(),
     mailFromEmail: z.string().trim().email().max(320).nullable(),
+    emailShowDetails: z.boolean().nullable(),
   })
   .partial();
 

@@ -12,6 +12,7 @@ export interface TenantSettings {
   firstLoginEmailVerification: boolean | null;
   mailFromName: string | null;
   mailFromEmail: string | null;
+  emailShowDetails: boolean | null;
   effective: { allowedDomains: string[]; verifyEmail: boolean; mailFrom: string };
 }
 
@@ -29,6 +30,7 @@ export function SettingsForm({ settings, save, title }: { settings: TenantSettin
   const [verify, setVerify] = useState<'inherit' | 'on' | 'off'>('inherit');
   const [fromName, setFromName] = useState('');
   const [fromEmail, setFromEmail] = useState('');
+  const [showDetails, setShowDetails] = useState(true);
   const [logoError, setLogoError] = useState('');
 
   useEffect(() => {
@@ -39,6 +41,7 @@ export function SettingsForm({ settings, save, title }: { settings: TenantSettin
     setVerify(settings.firstLoginEmailVerification === null ? 'inherit' : settings.firstLoginEmailVerification ? 'on' : 'off');
     setFromName(settings.mailFromName ?? '');
     setFromEmail(settings.mailFromEmail ?? '');
+    setShowDetails(settings.emailShowDetails !== false);
   }, [settings]);
 
   const chooseLogo = (file: File | undefined) => {
@@ -61,6 +64,7 @@ export function SettingsForm({ settings, save, title }: { settings: TenantSettin
         firstLoginEmailVerification: verify === 'inherit' ? null : verify === 'on',
         mailFromName: orNull(fromName),
         mailFromEmail: orNull(fromEmail),
+        emailShowDetails: showDetails ? null : false,
       };
       // only send the secret when something was typed: an empty box means "leave it as it is"
       return (await save(patch)) || 'Settings saved.';
@@ -122,6 +126,11 @@ export function SettingsForm({ settings, save, title }: { settings: TenantSettin
           <input id="fromEmail" type="email" value={fromEmail} onChange={(e) => setFromEmail(e.target.value)} />
           <p className="hint">Emails currently go out as: <span className="mono">{settings.effective.mailFrom}</span></p>
         </div>
+        <label className="check">
+          <input type="checkbox" checked={showDetails} onChange={(e) => setShowDetails(e.target.checked)} />
+          <span>Show the request's details in approval emails</span>
+        </label>
+        <p className="hint">Approvers see what was submitted (up to 12 fields) right in the email, above the Approve, Send back and Reject buttons. Turn this off if your forms hold information that should not be sent by email; the buttons stay.</p>
       </section>
 
       <div className="actions">

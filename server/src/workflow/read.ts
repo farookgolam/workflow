@@ -12,7 +12,7 @@ export interface StepView {
   stepId: number;
   stepOrder: number;
   name: string;
-  status: 'Waiting' | 'Active' | 'Approved' | 'Rejected' | 'Cancelled' | 'NotReached';
+  status: 'Waiting' | 'Active' | 'Returned' | 'Approved' | 'Rejected' | 'Cancelled' | 'NotReached';
   assignedUserId: number;
   assignedTo: string;
   delegateUserId: number | null;
@@ -39,6 +39,29 @@ export interface AttachmentInfo {
   createdAt: Date;
 }
 
+/** One field the submitter changed when they resubmitted after a send-back. Values are stored text (as in RequestData). */
+export interface FieldChange {
+  key: string;
+  label: string;
+  type: string;
+  from: string | null;
+  to: string | null;
+}
+
+/** One send-back round: an approver returned the request for changes, and (once resubmitted) what came back. */
+export interface ReturnView {
+  returnId: number;
+  requestStepId: number;
+  stepOrder: number;
+  stepName: string;
+  returnedBy: string;
+  returnedAt: Date;
+  reason: string;
+  resubmittedAt: Date | null;
+  resubmitNote: string | null;
+  changes: FieldChange[];
+}
+
 export interface RequestDetail {
   requestId: number;
   requestNumber: string;
@@ -59,6 +82,8 @@ export interface RequestDetail {
   pdfStored: boolean;
   data: FieldValue[];
   steps: StepView[];
+  /** Send-back rounds, oldest first. The last one is still open while a step is Returned. */
+  returns: ReturnView[];
 }
 
 /** Full, unfiltered picture of one request. Callers decide what their audience may see. */
@@ -109,6 +134,16 @@ export async function loadRequestDetail(tenantId: number, requestId: number): Pr
     `SELECT a.AttachmentId, a.RequestStepId, a.FileName, a.ContentType, a.SizeBytes, a.UploadedByUserId, u.DisplayName AS UploadedBy, a.CreatedAt
        FROM StepAttachments a JOIN Users u ON u.TenantId = a.TenantId AND u.UserId = a.UploadedByUserId
       WHERE a.TenantId = @TenantId AND a.RequestId = @RequestId ORDER BY a.AttachmentId`,
+    { RequestId: requestId },
+  );
+  const returns = await tenantQuery<Record<string, any>>(
+    tenantId,
+    `SELECT rr.ReturnId, rr.RequestStepId, rr.StepOrder, rs.StepName, u.DisplayName AS ReturnedBy, rr.ReturnedAt, rr.Reason,
+            rr.ResubmittedAt, rr.ResubmitNote, rr.ChangesJson
+       FROM RequestReturns rr
+       JOIN RequestSteps rs ON rs.TenantId = rr.TenantId AND rs.RequestStepId = rr.RequestStepId
+       JOIN Users u ON u.TenantId = rr.TenantId AND u.UserId = rr.ReturnedByUserId
+      WHERE rr.TenantId = @TenantId AND rr.RequestId = @RequestId ORDER BY rr.ReturnId`,
     { RequestId: requestId },
   );
   const fv = (x: { FieldKey: string; FieldLabel: string; FieldType: string; Value: string | null }): FieldValue => ({
@@ -166,6 +201,18 @@ export async function loadRequestDetail(tenantId: number, requestId: number): Pr
           createdAt: a.CreatedAt,
         })),
     })),
+    returns: returns.map((x) => ({
+      returnId: x.ReturnId,
+      requestStepId: x.RequestStepId,
+      stepOrder: x.StepOrder,
+      stepName: x.StepName,
+      returnedBy: x.ReturnedBy,
+      returnedAt: x.ReturnedAt,
+      reason: x.Reason,
+      resubmittedAt: x.ResubmittedAt,
+      resubmitNote: x.ResubmitNote,
+      changes: x.ChangesJson ? (JSON.parse(x.ChangesJson) as FieldChange[]) : [],
+    })),
   };
 }
 
@@ -173,6 +220,8 @@ export async function loadRequestDetail(tenantId: number, requestId: number): Pr
 export function submitterView(d: RequestDetail) {
   const current = d.steps.find((s) => s.status === 'Active');
   const rejectedStep = d.steps.find((s) => s.status === 'Rejected');
+  // the submitter always sees why it came back to them - they cannot fix it otherwise
+  const open = d.steps.some((s) => s.status === 'Returned') ? d.returns[d.returns.length - 1] : undefined;
   return {
     requestId: d.requestId,
     requestNumber: d.requestNumber,
@@ -185,8 +234,13 @@ export function submitterView(d: RequestDetail) {
       currentStep: d.currentStepOrder,
       totalSteps: d.totalSteps,
       waitingOn: current?.assignedTo ?? null,
-      label: current ? `Step ${current.stepOrder} of ${d.totalSteps}, waiting on ${current.assignedTo}` : d.status,
+      waitingSince: current?.activatedAt ?? null,
+      label: current
+        ? `Step ${current.stepOrder} of ${d.totalSteps}, waiting on ${current.assignedTo}`
+        : open ? `Sent back to you for changes by ${open.returnedBy}` : d.status,
     },
+    sentBack: open ? { stepOrder: open.stepOrder, stepName: open.stepName, returnedBy: open.returnedBy, returnedAt: open.returnedAt, reason: open.reason } : null,
+    returns: d.returns.map(({ returnId: _, requestStepId: __, ...r }) => r),
     rejection:
       d.status === 'Rejected'
         ? { reason: d.rejectionReason, stepOrder: d.rejectedStepOrder, stepName: rejectedStep?.name ?? null, rejectedBy: rejectedStep?.actedBy ?? null, rejectedAt: rejectedStep?.actedAt ?? null }
@@ -199,6 +253,7 @@ export function submitterView(d: RequestDetail) {
       name: s.name,
       status: s.status,
       approver: s.actedBy ?? s.assignedTo,
+      activatedAt: s.activatedAt,
       actedAt: s.actedAt,
       ...(d.submittersSeeComments ? { comments: s.comments, responses: s.responses } : {}),
     })),

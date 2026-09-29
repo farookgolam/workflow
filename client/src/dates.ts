@@ -19,3 +19,15 @@ export function usDateTime(iso: string | null | undefined): string {
 
 /** Sent with an export so dates with a time come out in the reader's time zone. */
 export const myTimeZone = (): string | undefined => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return undefined; } };
+
+/** How long ago, in words a person would say: "less than an hour", "5 hours", "3 days". */
+export function waitedFor(iso: string | null | undefined, now = Date.now()): string {
+  if (!iso) return '';
+  const ms = now - new Date(iso).getTime();
+  if (!(ms >= 0)) return '';
+  const hours = Math.floor(ms / 3_600_000);
+  if (hours < 1) return 'less than an hour';
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'}`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'}`;
+}

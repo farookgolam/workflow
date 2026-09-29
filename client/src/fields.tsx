@@ -579,6 +579,6 @@ export function ValueList({ items }: { items: FieldValue[] }) {
 export const fmtDateTime = (iso: string | null) => (iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—');
 
 export function StatusBadge({ status }: { status: string }) {
-  const label = status === 'InProgress' ? 'In progress' : status === 'NotReached' ? 'Not reached' : status;
+  const label = status === 'InProgress' ? 'In progress' : status === 'NotReached' ? 'Not reached' : status === 'Returned' ? 'Sent back' : status;
   return <span className={`badge badge-${status.toLowerCase()}`}>{label}</span>;
 }

@@ -4,6 +4,7 @@ import { api, download } from '../../api';
 import { AttachmentList, type Attachment } from '../../attachments';
 import { StatusBadge, ValueList, fmtDateTime, type FieldValue } from '../../fields';
 import { useAction, useLoad, type FormRow, type UserRow } from '../../hooks';
+import { ChangeList, type SendBack } from '../../sendback';
 import { SignatureImage } from '../../sigpad';
 
 /** What each archive state means, for the request page. */
@@ -81,7 +82,7 @@ export function AdminRequests() {
 
 interface Step { requestStepId: number; stepOrder: number; name: string; status: string; assignedUserId: number; assignedTo: string; delegateUserId: number | null; activatedAt: string | null; dueAt: string | null; actedAt: string | null; actedBy: string | null; actedIp: string | null; comments: string | null; signature: string | null; responses: FieldValue[]; attachments: Attachment[] }
 interface Detail {
-  request: { requestId: number; requestNumber: string; formName: string; status: string; totalSteps: number; submitterName: string; submittedAt: string; closedAt: string | null; rejectionReason: string | null; cancelReason: string | null; data: FieldValue[]; steps: Step[] };
+  request: { requestId: number; requestNumber: string; formName: string; status: string; totalSteps: number; submitterName: string; submittedAt: string; closedAt: string | null; rejectionReason: string | null; cancelReason: string | null; data: FieldValue[]; steps: Step[]; returns: SendBack[] };
   archive: { status: string; pdfAvailable: boolean; pdfBytes: number | null; pdfInFolder?: boolean };
   audit: { auditId: number; occurredAt: string; action: string; fromState: string | null; toState: string | null; ip: string | null; user: string }[];
   notifications: { notificationId: number; type: string; to: string; subject: string; status: string; attempts: number; createdAt: string; sentAt: string | null; lastError: string | null }[];
@@ -157,11 +158,17 @@ export function AdminRequestDetail() {
                 {s.status === 'Active' && s.activatedAt && ` · waiting since ${fmtDateTime(s.activatedAt)}`}
                 {s.status === 'Active' && s.dueAt && ` · due ${fmtDateTime(s.dueAt)}`}
               </p>
+              {r.returns.filter((x) => x.stepOrder === s.stepOrder).map((x, i) => (
+                <div key={i} className="notice back" style={{ margin: '.5rem 0' }}>
+                  <p style={{ margin: 0 }}><strong>Sent back</strong> by {x.returnedBy} · {fmtDateTime(x.returnedAt)}: {x.reason}</p>
+                  {x.resubmittedAt ? <><p style={{ margin: '.35rem 0 0' }}>Resubmitted by {r.submitterName} · {fmtDateTime(x.resubmittedAt)}{x.resubmitNote && `: ${x.resubmitNote}`}</p><ChangeList changes={x.changes} /></> : <p style={{ margin: '.35rem 0 0' }}>Waiting for {r.submitterName} to make changes.</p>}
+                </div>
+              ))}
               {s.responses.length > 0 && <ValueList items={s.responses} />}
               {s.comments && <blockquote>{s.comments}</blockquote>}
               {s.signature && <SignatureImage value={s.signature} label={`Signature of ${s.actedBy}`} />}
               <AttachmentList items={s.attachments ?? []} pathOf={(a) => `/admin/requests/${r.requestId}/attachments/${a.attachmentId}`} />
-              {open && (s.status === 'Active' || s.status === 'Waiting') && (
+              {open && (s.status === 'Active' || s.status === 'Waiting' || s.status === 'Returned') && (
                 reassign?.stepId === s.requestStepId ? (
                   <div className="actions">
                     <select value={reassign.userId} onChange={(e) => setReassign({ ...reassign, userId: e.target.value })} aria-label="New approver">

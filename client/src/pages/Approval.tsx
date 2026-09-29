@@ -4,12 +4,18 @@ import { ApiError, api, download } from '../api';
 import { NextApproverPicker, choicePayload, needsChoice, type StepHandOff } from '../approvers';
 import { AttachmentList, AttachmentUploader, type Attachment } from '../attachments';
 import { StatusBadge, ValueList, fmtDateTime, type FieldValue } from '../fields';
+import { ChangeList, SendBackHistory, type SendBack } from '../sendback';
 import { SignatureImage, SignaturePad } from '../sigpad';
 
-/** Landing point of the emailed link: /approve?token=… (already behind sign-in). */
+/** What the approver pressed in the email: Approve, Send back or Reject (opens the page ready for that). */
+export type Intent = 'approve' | 'return' | 'reject';
+const asIntent = (v: string | null): Intent | undefined => (v === 'approve' || v === 'return' || v === 'reject' ? v : undefined);
+
+/** Landing point of the emailed link: /approve?token=…[&do=approve|return|reject] (already behind sign-in). */
 export function ApproveLinkPage() {
   const [params] = useSearchParams();
   const token = params.get('token') ?? '';
+  const intent = asIntent(params.get('do'));
   const [target, setTarget] = useState<number | null>(null);
   const [error, setError] = useState('');
 
@@ -21,8 +27,8 @@ export function ApproveLinkPage() {
     return () => void (live = false);
   }, [token]);
 
-  // hand the token to the approval page in navigation state so it is sent with the decision, then drop it from the URL
-  if (target) return <Navigate to={`/approvals/${target}`} state={{ token }} replace />;
+  // hand the token (and the button pressed) to the approval page in navigation state, then drop them from the URL
+  if (target) return <Navigate to={`/approvals/${target}`} state={{ token, intent }} replace />;
   if (error) {
     return (
       <div className="card">
@@ -50,6 +56,8 @@ interface ApprovalView {
   request: { requestId: number; requestNumber: string; formName: string; status: string; submitterName: string; submittedAt: string; totalSteps: number; rejectionReason: string | null; pdfAvailable: boolean };
   submission: FieldValue[];
   previousSteps: PreviousStep[];
+  /** send-backs up to this step, oldest first; the last is still open while this step is Returned */
+  returns: SendBack[];
   step: {
     requestStepId: number;
     stepOrder: number;
@@ -65,15 +73,18 @@ interface ApprovalView {
 
 export function ApprovalPage() {
   const { requestStepId } = useParams();
-  const token = (useLocation().state as { token?: string } | null)?.token;
+  const nav = useLocation().state as { token?: string; intent?: Intent } | null;
+  const token = nav?.token;
+  const intent = nav?.intent;
   const [view, setView] = useState<ApprovalView | null>(null);
   const [loadError, setLoadError] = useState('');
 
   const [comments, setComments] = useState('');
   const [signature, setSignature] = useState(''); // pen strokes as JSON, '' = not signed; required to approve
   const [nextApprover, setNextApprover] = useState<string | null>(null); // who this approver picked for the next step, on a chosen step
-  const [rejecting, setRejecting] = useState(false);
+  const [mode, setMode] = useState<Intent>(intent ?? 'approve'); // which decision the form is set up for
   const [reason, setReason] = useState('');
+  const [returnReason, setReturnReason] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
   const [pdfError, setPdfError] = useState('');
@@ -89,19 +100,23 @@ export function ApprovalPage() {
 
   if (loadError) return <div className="card"><h1>Not available</h1><p className="notice bad">{loadError}</p><Link to={'/'}>Back to my approvals</Link></div>;
   if (!view) return <p className="muted center">Loading…</p>;
-  const { request, submission, previousSteps, step } = view;
+  const { request, submission, previousSteps, step, returns } = view;
+  const openReturn = step.status === 'Returned' ? returns[returns.length - 1] : undefined;
+  // came back to this step after this approver sent it back: show what changed first
+  const lastBack = [...returns].reverse().find((x) => x.stepOrder === step.stepOrder && x.resubmittedAt);
 
-  const send = async (decision: 'approve' | 'reject') => {
+  const send = async (decision: Intent) => {
     setErrors({});
     setFormError('');
     if (decision === 'reject' && !reason.trim()) return setErrors({ rejectionReason: 'A rejection reason is required' });
+    if (decision === 'return' && !returnReason.trim()) return setErrors({ returnReason: 'Say what needs to change' });
     if (decision === 'approve' && !signature) return setErrors({ signature: 'Sign to approve' });
     if (decision === 'approve' && needsChoice(step.nextStep, nextApprover)) return setErrors({ nextApproverUserId: `Choose who approves "${step.nextStep!.name}".` });
     setBusy(true);
     try {
       const result = await api<{ requestStatus: string; nextStepOrder: number | null }>(`/approvals/${step.requestStepId}/decision`, {
         method: 'POST',
-        body: { decision, comments: comments.trim() || undefined, rejectionReason: decision === 'reject' ? reason.trim() : undefined, token, ...(decision === 'approve' ? { signature: JSON.parse(signature), ...choicePayload(step.nextStep, nextApprover, 'next') } : {}) },
+        body: { decision, comments: decision === 'return' ? undefined : comments.trim() || undefined, rejectionReason: decision === 'reject' ? reason.trim() : undefined, returnReason: decision === 'return' ? returnReason.trim() : undefined, token, ...(decision === 'approve' ? { signature: JSON.parse(signature), ...choicePayload(step.nextStep, nextApprover, 'next') } : {}) },
       });
       setOutcome(result);
       load(); // re-read: the decision is now final and shown read-only
@@ -118,6 +133,101 @@ export function ApprovalPage() {
     }
   };
 
+  const yourSection = (
+    <section className={`card ${step.canAct ? 'card-active' : ''}`}>
+      <h2>Your section{!step.canAct && <span className="tag">Read-only</span>}</h2>
+
+      {step.decided && (
+        <>
+          <div className="prev-head"><span className="muted">{step.decided.actedBy} · {fmtDateTime(step.decided.actedAt)}</span><StatusBadge status={step.decided.decision} /></div>
+          <ValueList items={step.decided.responses} />
+          {step.decided.comments && <blockquote>{step.decided.comments}</blockquote>}
+          {step.decided.signature && <SignatureImage value={step.decided.signature} label={`Signature of ${step.decided.actedBy}`} />}
+          <AttachmentList items={step.attachments} pathOf={(a) => `/approvals/requests/${request.requestId}/attachments/${a.attachmentId}`} />
+          {step.decided.decision === 'Rejected' && request.rejectionReason && <p><strong>Rejection reason:</strong> {request.rejectionReason}</p>}
+        </>
+      )}
+      {request.pdfAvailable && (
+        <p style={{ marginTop: '1rem' }}>
+          <button onClick={() => { setPdfError(''); download(`/approvals/requests/${request.requestId}/pdf`, `${request.requestNumber}.pdf`).catch((e: Error) => setPdfError(e.message)); }}>Download PDF</button>
+          {pdfError && <span className="field-error"> {pdfError}</span>}
+        </p>
+      )}
+      {openReturn && (
+        <div className="notice back">
+          <p style={{ marginTop: 0 }}><strong>Sent back by {openReturn.returnedBy}</strong> to {request.submitterName} for changes on {fmtDateTime(openReturn.returnedAt)}.</p>
+          <blockquote>{openReturn.reason}</blockquote>
+          <p style={{ marginBottom: 0 }}>It comes back to this step, and you are emailed, when they resubmit.</p>
+          <AttachmentList items={step.attachments} pathOf={(a) => `/approvals/requests/${request.requestId}/attachments/${a.attachmentId}`} />
+        </div>
+      )}
+      {!step.decided && !step.canAct && !openReturn && (
+        <p className="muted">{step.status === 'Waiting' ? 'This step is not active yet - earlier approvers have not finished.' : `This step is ${step.status.toLowerCase()}; no action is needed.`}</p>
+      )}
+
+      {step.canAct && (
+        <form onSubmit={(e) => e.preventDefault()} noValidate>
+          {formError && <p className="notice bad" role="alert">{formError}</p>}
+          <div className="seg" role="group" aria-label="Your decision" style={{ marginBottom: '1rem' }}>
+            {([['approve', 'Approve'], ['return', 'Send back for changes'], ['reject', 'Reject']] as const).map(([m, label]) => (
+              <button key={m} type="button" className={mode === m ? 'on' : ''} aria-pressed={mode === m} disabled={busy} onClick={() => { setMode(m); setErrors({}); }}>{label}</button>
+            ))}
+          </div>
+
+          {mode === 'approve' && (
+            <>
+              <div className="field">
+                <label htmlFor="comments">Comments</label>
+                <textarea id="comments" rows={3} maxLength={4000} value={comments} disabled={busy} onChange={(e) => setComments(e.target.value)} />
+              </div>
+              <AttachmentUploader requestStepId={step.requestStepId} requestId={request.requestId} items={step.attachments} max={10} disabled={busy} onChange={load} />
+              <div className="field">
+                <label htmlFor="signature">Your signature<em className="req"> *</em></label>
+                <SignaturePad id="signature" label="Your signature" value={signature} disabled={busy} invalid={!!errors.signature} describedBy={errors.signature ? 'signature-error' : undefined} onChange={(v) => { setSignature(v); setErrors(({ signature: _, ...rest }) => rest); }} />
+                {errors.signature && <p className="field-error" id="signature-error">{errors.signature}</p>}
+                <p className="hint">Needed to approve. Sending back or rejecting does not need a signature.</p>
+              </div>
+              {step.nextStep && <NextApproverPicker id="next-approver" step={step.nextStep} totalSteps={request.totalSteps} when="as soon as you approve" value={nextApprover} error={errors.nextApprover ?? errors.nextApproverUserId ?? errors.nextApproverKey} disabled={busy} onChange={setNextApprover} />}
+              <div className="actions">
+                <button type="button" className="primary" disabled={busy} onClick={() => void send('approve')}>{step.nextStep ? 'Approve and send on' : 'Approve'}</button>
+              </div>
+            </>
+          )}
+
+          {mode === 'return' && (
+            <div className="return-box">
+              <div className="field">
+                <label htmlFor="return-reason">What needs to change?<em className="req"> *</em></label>
+                <textarea id="return-reason" rows={3} maxLength={2000} value={returnReason} disabled={busy} aria-invalid={!!errors.returnReason} onChange={(e) => setReturnReason(e.target.value)} autoFocus />
+                {errors.returnReason && <p className="field-error">{errors.returnReason}</p>}
+                <p className="hint">{request.submitterName} is emailed this and can edit the request and resubmit it. {step.stepOrder > 1 ? 'Earlier approvals stay as they are, and it' : 'It'} comes straight back to you.</p>
+              </div>
+              <div className="actions">
+                <button type="button" className="primary" disabled={busy} onClick={() => void send('return')}>Send back to {request.submitterName}</button>
+              </div>
+            </div>
+          )}
+
+          {mode === 'reject' && (
+            <div className="reject-box">
+              <div className="field">
+                <label htmlFor="reason">Reason for rejection<em className="req"> *</em></label>
+                <textarea id="reason" rows={3} maxLength={2000} value={reason} disabled={busy} aria-invalid={!!errors.rejectionReason} onChange={(e) => setReason(e.target.value)} autoFocus />
+                {errors.rejectionReason && <p className="field-error">{errors.rejectionReason}</p>}
+                <p className="hint">Rejection is final: the workflow stops, the submitter is sent this reason, and the request cannot be reopened. If it only needs fixing, send it back instead.</p>
+              </div>
+              <div className="actions">
+                <button type="button" className="danger" disabled={busy} onClick={() => void send('reject')}>Confirm rejection</button>
+              </div>
+            </div>
+          )}
+        </form>
+      )}
+    </section>
+  );
+  // arrived from a button in the email: the decision comes first, the details under it
+  const quick = !!intent && step.canAct && !outcome;
+
   return (
     <div className="stack">
       <div className="page-head">
@@ -126,16 +236,28 @@ export function ApprovalPage() {
           <h1>Step {step.stepOrder} of {request.totalSteps}: {step.name}</h1>
           <p className="muted">Submitted by {request.submitterName} on {fmtDateTime(request.submittedAt)}</p>
         </div>
-        <StatusBadge status={request.status} />
+        <StatusBadge status={step.status === 'Returned' ? 'Returned' : request.status} />
       </div>
 
       {outcome && (
         <p className={`notice ${outcome.requestStatus === 'Rejected' ? 'bad' : 'ok'}`} role="status">
           {outcome.requestStatus === 'Rejected' && 'You rejected this request. The submitter and the administrator have been notified.'}
+          {outcome.requestStatus === 'Returned' && `Sent back to ${request.submitterName}. It comes back to you, with an email, when they resubmit.`}
           {outcome.requestStatus === 'Approved' && 'Approved. That was the final step - the submitter has been notified.'}
           {outcome.requestStatus === 'InProgress' && `Approved. The request has moved on to step ${outcome.nextStepOrder}.`}
         </p>
       )}
+
+      {step.canAct && lastBack && (
+        <section className="notice back">
+          <p style={{ marginTop: 0 }}><strong>Resubmitted by {request.submitterName}</strong> on {fmtDateTime(lastBack.resubmittedAt)}, after {lastBack.returnedBy} sent it back: “{lastBack.reason}”</p>
+          <ChangeList changes={lastBack.changes} />
+          {lastBack.resubmitNote && <blockquote>{lastBack.resubmitNote}</blockquote>}
+        </section>
+      )}
+
+      {quick && <p className="muted small" style={{ margin: 0 }}>Check the request below before you confirm.</p>}
+      {quick && yourSection}
 
       <section className="card">
         <h2>Original submission <span className="tag">Read-only</span></h2>
@@ -161,69 +283,10 @@ export function ApprovalPage() {
         </section>
       )}
 
-      <section className={`card ${step.canAct ? 'card-active' : ''}`}>
-        <h2>Your section{!step.canAct && <span className="tag">Read-only</span>}</h2>
+      {/* the round shown at the top is not repeated here */}
+      <SendBackHistory items={returns.filter((x) => !(step.canAct && x === lastBack))} />
 
-        {step.decided && (
-          <>
-            <div className="prev-head"><span className="muted">{step.decided.actedBy} · {fmtDateTime(step.decided.actedAt)}</span><StatusBadge status={step.decided.decision} /></div>
-            <ValueList items={step.decided.responses} />
-            {step.decided.comments && <blockquote>{step.decided.comments}</blockquote>}
-            {step.decided.signature && <SignatureImage value={step.decided.signature} label={`Signature of ${step.decided.actedBy}`} />}
-            <AttachmentList items={step.attachments} pathOf={(a) => `/approvals/requests/${request.requestId}/attachments/${a.attachmentId}`} />
-            {step.decided.decision === 'Rejected' && request.rejectionReason && <p><strong>Rejection reason:</strong> {request.rejectionReason}</p>}
-          </>
-        )}
-        {request.pdfAvailable && (
-          <p style={{ marginTop: '1rem' }}>
-            <button onClick={() => { setPdfError(''); download(`/approvals/requests/${request.requestId}/pdf`, `${request.requestNumber}.pdf`).catch((e: Error) => setPdfError(e.message)); }}>Download PDF</button>
-            {pdfError && <span className="field-error"> {pdfError}</span>}
-          </p>
-        )}
-        {!step.decided && !step.canAct && (
-          <p className="muted">{step.status === 'Waiting' ? 'This step is not active yet - earlier approvers have not finished.' : `This step is ${step.status.toLowerCase()}; no action is needed.`}</p>
-        )}
-
-        {step.canAct && (
-          <form onSubmit={(e) => e.preventDefault()} noValidate>
-            {formError && <p className="notice bad" role="alert">{formError}</p>}
-            <div className="field">
-              <label htmlFor="comments">Comments</label>
-              <textarea id="comments" rows={3} maxLength={4000} value={comments} disabled={busy} onChange={(e) => setComments(e.target.value)} />
-            </div>
-            <AttachmentUploader requestStepId={step.requestStepId} requestId={request.requestId} items={step.attachments} max={10} disabled={busy} onChange={load} />
-
-            {rejecting ? (
-              <div className="reject-box">
-                <div className="field">
-                  <label htmlFor="reason">Reason for rejection<em className="req"> *</em></label>
-                  <textarea id="reason" rows={3} maxLength={2000} value={reason} disabled={busy} aria-invalid={!!errors.rejectionReason} onChange={(e) => setReason(e.target.value)} autoFocus />
-                  {errors.rejectionReason && <p className="field-error">{errors.rejectionReason}</p>}
-                  <p className="hint">Rejection is final: the workflow stops, the submitter is sent this reason, and the request cannot be reopened.</p>
-                </div>
-                <div className="actions">
-                  <button type="button" className="danger" disabled={busy} onClick={() => void send('reject')}>Confirm rejection</button>
-                  <button type="button" disabled={busy} onClick={() => setRejecting(false)}>Back</button>
-                </div>
-              </div>
-            ) : (
-              <>
-              <div className="field">
-                <label htmlFor="signature">Your signature<em className="req"> *</em></label>
-                <SignaturePad id="signature" label="Your signature" value={signature} disabled={busy} invalid={!!errors.signature} describedBy={errors.signature ? 'signature-error' : undefined} onChange={(v) => { setSignature(v); setErrors(({ signature: _, ...rest }) => rest); }} />
-                {errors.signature && <p className="field-error" id="signature-error">{errors.signature}</p>}
-                <p className="hint">Needed to approve. Rejecting does not need a signature.</p>
-              </div>
-              {step.nextStep && <NextApproverPicker id="next-approver" step={step.nextStep} totalSteps={request.totalSteps} when="as soon as you approve" value={nextApprover} error={errors.nextApprover ?? errors.nextApproverUserId ?? errors.nextApproverKey} disabled={busy} onChange={setNextApprover} />}
-              <div className="actions">
-                <button type="button" className="primary" disabled={busy} onClick={() => void send('approve')}>{step.nextStep ? 'Approve and send on' : 'Approve'}</button>
-                <button type="button" className="danger-outline" disabled={busy} onClick={() => setRejecting(true)}>Reject…</button>
-              </div>
-              </>
-            )}
-          </form>
-        )}
-      </section>
+      {!quick && yourSection}
 
       <p><Link to={'/'}>← My approvals</Link></p>
     </div>

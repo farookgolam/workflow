@@ -8,7 +8,7 @@ import { ThemeToggle } from './theme';
 import { ApprovalPage, ApproveLinkPage } from './pages/Approval';
 import { LoginScreen } from './pages/Login';
 import { HomePage } from './pages/Home';
-import { AccountPage, NewRequestPage, RequestPage } from './pages/Requests';
+import { AccountPage, NewRequestPage, RequestPage, ResubmitPage } from './pages/Requests';
 import { AdminDashboard } from './pages/admin/Dashboard';
 import { AdminFormEditor, AdminForms } from './pages/admin/Forms';
 import { AdminRequestDetail, AdminRequests } from './pages/admin/Requests';
@@ -109,6 +109,7 @@ export function App() {
         <Route path="approvals/:requestStepId" element={<ApprovalPage />} />
         <Route path="requests/new/:formId" element={<NewRequestPage />} />
         <Route path="requests/:requestId" element={<RequestPage />} />
+        <Route path="requests/:requestId/edit" element={<ResubmitPage />} />
         <Route path="account" element={<AccountPage />} />
         <Route path="admin" element={<AdminOnly />}>
           <Route index element={<AdminDashboard />} />

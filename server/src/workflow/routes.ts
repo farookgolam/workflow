@@ -8,7 +8,7 @@ import { getFormFields, listActiveForms } from '../forms/service';
 import { AppError } from '../http/errors';
 import { lookupDataForFields } from '../lookups/service';
 import { firstStepHandOff, nextStepHandOff } from './approvers';
-import { decideStep, submitRequest } from './engine';
+import { decideStep, resubmitRequest, submitRequest } from './engine';
 import { loadRequestDetail, submitterView } from './read';
 
 export const idParam = (raw: unknown): number => {
@@ -63,7 +63,8 @@ export const myRouter = Router();
 myRouter.get('/requests', async (req, res) => {
   const q = z
     .object({
-      status: z.enum(['InProgress', 'Approved', 'Rejected', 'Cancelled']).optional(),
+      // 'Returned' = in progress, but sent back to me for changes
+      status: z.enum(['InProgress', 'Returned', 'Approved', 'Rejected', 'Cancelled']).optional(),
       page: z.coerce.number().int().min(1).default(1),
       pageSize: z.coerce.number().int().min(1).max(100).default(25),
     })
@@ -71,15 +72,20 @@ myRouter.get('/requests', async (req, res) => {
   const rows = await tenantQuery<Record<string, any>>(
     req.user!.tenantId,
     `SELECT r.RequestId, r.RequestNumber, r.FormId, f.Name AS FormName, r.Status, r.CurrentStepOrder, r.TotalSteps, r.SubmittedAt, r.ClosedAt,
-            rs.StepName AS CurrentStepName, u.DisplayName AS WaitingOn, r.RejectionReason, rj.StepOrder AS RejectedStepOrder, rj.StepName AS RejectedStepName,
+            rs.StepName AS CurrentStepName, rs.Status AS CurrentStepStatus, rs.ActivatedAt AS WaitingSince, u.DisplayName AS WaitingOn,
+            rr.Reason AS ReturnReason, ru.DisplayName AS ReturnedBy, rr.ReturnedAt,
+            r.RejectionReason, rj.StepOrder AS RejectedStepOrder, rj.StepName AS RejectedStepName,
             CASE WHEN EXISTS (SELECT 1 FROM RequestDocuments d WHERE d.TenantId = r.TenantId AND d.RequestId = r.RequestId) OR r.PdfLocalPath IS NOT NULL THEN 1 ELSE 0 END AS PdfAvailable, COUNT(*) OVER () AS Total
        FROM Requests r
        JOIN Forms f ON f.TenantId = r.TenantId AND f.FormId = r.FormId
-       LEFT JOIN RequestSteps rs ON rs.TenantId = r.TenantId AND rs.RequestId = r.RequestId AND rs.Status = 'Active'
+       LEFT JOIN RequestSteps rs ON rs.TenantId = r.TenantId AND rs.RequestId = r.RequestId AND rs.Status IN ('Active','Returned')
        LEFT JOIN Users u ON u.TenantId = rs.TenantId AND u.UserId = rs.AssignedUserId
+       LEFT JOIN RequestReturns rr ON rr.TenantId = r.TenantId AND rr.RequestId = r.RequestId AND rr.ResubmittedAt IS NULL AND rs.Status = 'Returned'
+       LEFT JOIN Users ru ON ru.TenantId = rr.TenantId AND ru.UserId = rr.ReturnedByUserId
        LEFT JOIN RequestSteps rj ON rj.TenantId = r.TenantId AND rj.RequestStepId = r.RejectedRequestStepId
-      WHERE r.TenantId = @TenantId AND r.SubmitterUserId = @UserId AND (@Status IS NULL OR r.Status = @Status)
-      ORDER BY r.SubmittedAt DESC, r.RequestId DESC
+      WHERE r.TenantId = @TenantId AND r.SubmitterUserId = @UserId
+        AND (@Status IS NULL OR r.Status = @Status OR (@Status = 'Returned' AND r.Status = 'InProgress' AND rs.Status = 'Returned'))
+      ORDER BY CASE WHEN rs.Status = 'Returned' THEN 0 ELSE 1 END, r.SubmittedAt DESC, r.RequestId DESC
       OFFSET @Offset ROWS FETCH NEXT @Size ROWS ONLY`,
     { UserId: req.user!.userId, Status: q.status ?? null, Offset: (q.page - 1) * q.pageSize, Size: q.pageSize },
   );
@@ -96,7 +102,9 @@ myRouter.get('/requests', async (req, res) => {
       currentStep: r.CurrentStepOrder,
       currentStepName: r.CurrentStepName,
       totalSteps: r.TotalSteps,
-      waitingOn: r.WaitingOn,
+      waitingOn: r.CurrentStepStatus === 'Active' ? r.WaitingOn : null,
+      waitingSince: r.CurrentStepStatus === 'Active' ? r.WaitingSince : null,
+      sentBack: r.CurrentStepStatus === 'Returned' ? { reason: r.ReturnReason, returnedBy: r.ReturnedBy, returnedAt: r.ReturnedAt } : null,
       submittedAt: r.SubmittedAt,
       closedAt: r.ClosedAt,
       rejection: r.Status === 'Rejected' ? { reason: r.RejectionReason, stepOrder: r.RejectedStepOrder, stepName: r.RejectedStepName } : null,
@@ -110,6 +118,27 @@ myRouter.get('/requests/:id', async (req, res) => {
   // someone else's request looks exactly like a missing one
   if (!detail || detail.submitterUserId !== req.user!.userId) throw new AppError(404, 'not_found', 'Request not found');
   res.json({ request: submitterView(detail) });
+});
+
+// The form to edit a sent-back request with: its fields as they are now (the same ones resubmit validates
+// against), even if the form has since been switched off for new requests.
+myRouter.get('/requests/:id/form', async (req, res) => {
+  const tenantId = req.user!.tenantId;
+  const detail = await loadRequestDetail(tenantId, idParam(req.params.id));
+  if (!detail || detail.submitterUserId !== req.user!.userId) throw new AppError(404, 'not_found', 'Request not found');
+  const fields = await getFormFields(tenantId, detail.formId);
+  res.json({
+    form: { formId: detail.formId, name: detail.formName },
+    fields: fields.map(({ key, label, type, required, options, rules, props }) => ({ key, label, type, required, options, rules, props })),
+    lookups: await lookupDataForFields(tenantId, fields),
+  });
+});
+
+// The edited submission after an approver sent the request back.
+myRouter.post('/requests/:id/resubmit', async (req, res) => {
+  const body = z.object({ values, note: z.string().max(2000).optional() }).parse(req.body);
+  const u = req.user!;
+  res.json(await resubmitRequest(u.tenantId, actorFrom(req), { userId: u.userId, email: u.email, displayName: u.displayName }, idParam(req.params.id), body.values, body.note));
 });
 
 // ---- approver page + decision (mounted at /approvals, behind requireAuth) ----
@@ -216,17 +245,22 @@ approvalsRouter.get('/:requestStepId', async (req, res) => {
       // populated once decided
       // the step this one hands over to when approved (null on the last step)
       nextStep: canAct ? await nextStepHandOff(u.tenantId, detail.requestId, step.stepOrder, u.userId) : null,
-      decided: canAct || step.status === 'Waiting' ? null : { decision: step.status, actedBy: step.actedBy, actedAt: step.actedAt, comments: step.comments, responses: step.responses, signature: step.signature },
+      decided: canAct || step.status === 'Waiting' || step.status === 'Returned' ? null : { decision: step.status, actedBy: step.actedBy, actedAt: step.actedAt, comments: step.comments, responses: step.responses, signature: step.signature },
     },
+    // send-backs up to this step (never a later step's), oldest first; the last one is still open while this step is Returned
+    returns: detail.returns
+      .filter((x) => x.stepOrder <= step.stepOrder)
+      .map((x) => ({ stepOrder: x.stepOrder, stepName: x.stepName, returnedBy: x.returnedBy, returnedAt: x.returnedAt, reason: x.reason, resubmittedAt: x.resubmittedAt, resubmitNote: x.resubmitNote, changes: x.changes })),
   });
 });
 
 const decisionBody = z.object({
-  decision: z.enum(['approve', 'reject']),
+  decision: z.enum(['approve', 'reject', 'return']),
   // approvers no longer fill in controls; an empty object is still accepted from older pages
   fields: z.object({}, { message: 'Approvers no longer fill in controls' }).strict().optional(),
   comments: z.string().max(4000).optional(),
   rejectionReason: z.string().max(2000).optional(),
+  returnReason: z.string().max(2000).optional(),
   // pen strokes from the signature pad; required to approve (checked by decideStep)
   signature: z.unknown().optional(),
   token: z.string().min(20).max(200).optional(),

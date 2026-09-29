@@ -14,12 +14,14 @@ export interface TenantSettingsRow {
   FirstLoginEmailVerification: boolean | null;
   MailFromName: string | null;
   MailFromEmail: string | null;
+  EmailShowDetails: boolean | null;
 }
 
 export interface EffectiveSettings {
   brand: { name: string | null; color: string | null; logoDataUrl: string | null };
   signup: { allowedDomains: string[]; verifyEmail: boolean };
-  mail: { from: string };
+  /** showDetails: approval emails list the submitted values (on unless the customer turned it off). */
+  mail: { from: string; showDetails: boolean };
 }
 
 const cache = new Map<number, EffectiveSettings>();
@@ -37,7 +39,7 @@ export async function rawSettings(tenantId: number): Promise<TenantSettingsRow> 
   const [row] = await tenantQuery<TenantSettingsRow>(
     tenantId,
     `SELECT BrandName, BrandColor, LogoDataUrl, AllowedEmailDomains, FirstLoginEmailVerification,
-            MailFromName, MailFromEmail
+            MailFromName, MailFromEmail, EmailShowDetails
        FROM TenantSettings WHERE TenantId = @TenantId`,
   );
   return (
@@ -49,6 +51,7 @@ export async function rawSettings(tenantId: number): Promise<TenantSettingsRow> 
       FirstLoginEmailVerification: null,
       MailFromName: null,
       MailFromEmail: null,
+      EmailShowDetails: null,
     }
   );
 }
@@ -64,7 +67,7 @@ export async function effectiveSettings(tenantId: number): Promise<EffectiveSett
       allowedDomains: row.AllowedEmailDomains === null ? config.signup.allowedDomains : domainList(row.AllowedEmailDomains),
       verifyEmail: row.FirstLoginEmailVerification === null ? config.signup.verifyEmail : row.FirstLoginEmailVerification,
     },
-    mail: { from: mailFrom(row) },
+    mail: { from: mailFrom(row), showDetails: row.EmailShowDetails !== false },
   };
   cache.set(tenantId, settings);
   return settings;
@@ -78,6 +81,7 @@ export interface SettingsPatch {
   firstLoginEmailVerification?: boolean | null;
   mailFromName?: string | null;
   mailFromEmail?: string | null;
+  emailShowDetails?: boolean | null;
 }
 
 const COLUMNS: Record<keyof SettingsPatch, string> = {
@@ -88,6 +92,7 @@ const COLUMNS: Record<keyof SettingsPatch, string> = {
   firstLoginEmailVerification: 'FirstLoginEmailVerification',
   mailFromName: 'MailFromName',
   mailFromEmail: 'MailFromEmail',
+  emailShowDetails: 'EmailShowDetails',
 };
 
 /** Applies only the keys that are present. Returns the names that changed, for the audit entry. */
@@ -130,6 +135,7 @@ export async function settingsForApi(tenantId: number) {
     firstLoginEmailVerification: row.FirstLoginEmailVerification,
     mailFromName: row.MailFromName,
     mailFromEmail: row.MailFromEmail,
+    emailShowDetails: row.EmailShowDetails,
     effective: {
       allowedDomains: effective.signup.allowedDomains,
       verifyEmail: effective.signup.verifyEmail,

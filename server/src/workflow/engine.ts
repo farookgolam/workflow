@@ -5,6 +5,8 @@
 //   InProgress --approve (last)------> Approved   (final)  -> ArchiveStatus = PdfPending
 //   InProgress --reject (any step)---> Rejected   (final)  -> ArchiveStatus = PdfPending
 //   InProgress --admin cancel--------> Cancelled  (final)
+//   InProgress --send back-----------> InProgress (that step Returned: waiting on the submitter)
+//   InProgress --resubmit------------> InProgress (the same step Active again, with the edited submission)
 //
 // Note: Requests and RequestSteps carry triggers, and SQL Server forbids OUTPUT (without
 // INTO) on such tables - so writes to them use SCOPE_IDENTITY() / @@ROWCOUNT instead.
@@ -17,9 +19,11 @@ import { checkSignature } from '../forms/sigpad';
 import { validateValues } from '../forms/validation';
 import { AppError } from '../http/errors';
 import { resolveLookupRows } from '../lookups/service';
-import { adminRecipients, emailBody, queueNotification } from '../notifications/outbox';
+import { adminRecipients, emailBody, queueNotification, type EmailLine } from '../notifications/outbox';
 import { tenantBaseUrlBySlug } from '../tenant';
 import { handOverStep } from './approvers';
+import { emailValue, submissionDetails } from './emailDetails';
+import type { FieldChange } from './read';
 
 interface RequestContext {
   requestId: number;
@@ -52,21 +56,48 @@ async function nextRequestNumber(tenantId: number, tx: Tx): Promise<string> {
   return `REQ-${String(row.LastNumber).padStart(6, '0')}`;
 }
 
-/** Waiting -> Active for one step: sets the clock, issues the approver's link token, queues their email. */
-async function activateStep(tenantId: number, actor: Actor, ctx: RequestContext, stepOrder: number, tx: Tx): Promise<void> {
+/** What every "please decide" email ends with: the submitted values, then Approve / Send back / Reject buttons and the plain link. */
+async function decisionLines(tenantId: number, requestId: number, link: string, tx: Tx): Promise<EmailLine[]> {
+  return [
+    { details: await submissionDetails(tenantId, requestId, tx), title: 'Request details' },
+    {
+      buttons: [
+        { link: `${link}&do=approve`, text: 'Approve', tone: 'ok' },
+        { link: `${link}&do=return`, text: 'Send back for changes', tone: 'plain' },
+        { link: `${link}&do=reject`, text: 'Reject', tone: 'bad' },
+      ],
+    },
+    { link, text: 'Open the full request' },
+    `You will be asked to sign in, and to sign on screen to approve. Nothing is decided until you confirm on that page. This link is personal to you and expires in ${config.auth.approvalTokenTtlDays} days.`,
+  ];
+}
+
+/** "Amount: 100.00 → 120.00" rows for the approver, in the email's words. */
+const changeRows = (changes: FieldChange[]) =>
+  changes.map((c) => ({ label: c.label, value: `${emailValue(c.type, c.from) ?? '(empty)'} → ${emailValue(c.type, c.to) ?? '(empty)'}` }));
+
+/**
+ * Waiting -> Active for one step (or Returned -> Active when the submitter resubmits after a send-back): sets the
+ * clock, issues the approver's link token, queues their email.
+ */
+async function activateStep(
+  tenantId: number, actor: Actor, ctx: RequestContext, stepOrder: number, tx: Tx,
+  resubmitted?: { changes: FieldChange[]; note: string | null },
+): Promise<void> {
+  const from = resubmitted ? 'Returned' : 'Waiting';
   const [{ n }] = await tenantQuery<{ n: number }>(
     tenantId,
-    `UPDATE rs SET Status = 'Active', ActivatedAt = SYSUTCDATETIME(),
+    `UPDATE rs SET Status = 'Active', ActivatedAt = SYSUTCDATETIME(), LastReminderAt = NULL, ReminderCount = 0, EscalatedAt = NULL,
             DueAt = CASE WHEN COALESCE(s.ReminderAfterDays, s.EscalateAfterDays) IS NULL THEN NULL
                          ELSE DATEADD(DAY, COALESCE(s.ReminderAfterDays, s.EscalateAfterDays), SYSUTCDATETIME()) END
        FROM RequestSteps rs
        JOIN ApprovalSteps s ON s.TenantId = rs.TenantId AND s.StepId = rs.StepId
-      WHERE rs.TenantId = @TenantId AND rs.RequestId = @RequestId AND rs.StepOrder = @StepOrder AND rs.Status = 'Waiting';
+      WHERE rs.TenantId = @TenantId AND rs.RequestId = @RequestId AND rs.StepOrder = @StepOrder AND rs.Status = @From;
      SELECT @@ROWCOUNT AS n;`,
-    { RequestId: ctx.requestId, StepOrder: stepOrder },
+    { RequestId: ctx.requestId, StepOrder: stepOrder, From: from },
     tx,
   );
-  if (n !== 1) throw new Error(`activateStep: step ${stepOrder} of request ${ctx.requestId} was not Waiting`);
+  if (n !== 1) throw new Error(`activateStep: step ${stepOrder} of request ${ctx.requestId} was not ${from}`);
 
   const [step] = await tenantQuery<{ RequestStepId: number; StepName: string; AssignedUserId: number; Email: string; DisplayName: string }>(
     tenantId,
@@ -78,20 +109,26 @@ async function activateStep(tenantId: number, actor: Actor, ctx: RequestContext,
   );
   const link = await issueApprovalLink(tenantId, ctx.tenantSlug, step.RequestStepId, step.AssignedUserId, tx);
 
+  const intro: EmailLine[] = resubmitted
+    ? [
+        `${ctx.submitter.displayName} has made changes to the request you sent back, and it is waiting for your decision again at step "${step.StepName}".`,
+        ...(resubmitted.changes.length ? [{ details: changeRows(resubmitted.changes), title: 'What changed' }] : ['No values were changed.']),
+        ...(resubmitted.note ? [{ label: 'Their note', value: resubmitted.note }] : []),
+      ]
+    : [`A request is waiting for your decision at step "${step.StepName}".`];
   await queueNotification(
     tenantId,
     {
-      type: 'ApprovalRequested',
+      type: resubmitted ? 'Resubmitted' : 'ApprovalRequested',
       to: { userId: step.AssignedUserId, email: step.Email },
-      subject: `Approval needed: ${ctx.formName} ${ctx.requestNumber}`,
+      subject: `${resubmitted ? 'Resubmitted for approval' : 'Approval needed'}: ${ctx.formName} ${ctx.requestNumber}`,
       bodyHtml: emailBody([
         `Hello ${step.DisplayName},`,
-        `A request is waiting for your decision at step "${step.StepName}".`,
+        ...intro,
         { label: 'Form', value: ctx.formName },
         { label: 'Request', value: ctx.requestNumber },
         { label: 'Submitted by', value: ctx.submitter.displayName },
-        { link, text: 'Review and decide' },
-        `You will be asked to sign in. This link is personal to you and expires in ${config.auth.approvalTokenTtlDays} days.`,
+        ...(await decisionLines(tenantId, ctx.requestId, link, tx)),
       ]),
       requestId: ctx.requestId,
       requestStepId: step.RequestStepId,
@@ -106,7 +143,7 @@ async function activateStep(tenantId: number, actor: Actor, ctx: RequestContext,
       entityType: 'RequestStep',
       entityId: step.RequestStepId,
       requestId: ctx.requestId,
-      fromState: 'Waiting',
+      fromState: from,
       toState: 'Active',
       detail: { stepOrder, assignedUserId: step.AssignedUserId, selfApproval: step.AssignedUserId === ctx.submitter.userId || undefined },
     },
@@ -132,6 +169,18 @@ export async function issueApprovalLink(tenantId: number, tenantSlug: string, re
     tx,
   );
   return `${await tenantBaseUrlBySlug(tenantSlug)}/approve?token=${raw}`;
+}
+
+async function writeRequestData(tenantId: number, requestId: number, data: ReturnType<typeof validateValues>, tx: Tx): Promise<void> {
+  for (const { def, value } of data) {
+    await tenantQuery(
+      tenantId,
+      `INSERT INTO RequestData (TenantId, RequestId, FieldId, FieldKey, FieldLabel, FieldType, SortOrder, Value)
+       VALUES (@TenantId, @RequestId, @FieldId, @Key, @Label, @Type, @Sort, @Value)`,
+      { RequestId: requestId, FieldId: def.id, Key: def.key, Label: def.label, Type: def.type, Sort: def.sortOrder, Value: value },
+      tx,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------------------
@@ -185,15 +234,7 @@ export async function submitRequest(
       tx,
     );
 
-    for (const { def, value } of data) {
-      await tenantQuery(
-        tenantId,
-        `INSERT INTO RequestData (TenantId, RequestId, FieldId, FieldKey, FieldLabel, FieldType, SortOrder, Value)
-         VALUES (@TenantId, @RequestId, @FieldId, @Key, @Label, @Type, @Sort, @Value)`,
-        { RequestId, FieldId: def.id, Key: def.key, Label: def.label, Type: def.type, Sort: def.sortOrder, Value: value },
-        tx,
-      );
-    }
+    await writeRequestData(tenantId, RequestId, data, tx);
     for (const s of steps) {
       await tenantQuery(
         tenantId,
@@ -237,9 +278,12 @@ export async function submitRequest(
 // decide (approve / reject)
 // ---------------------------------------------------------------------------------------
 export interface DecisionInput {
-  decision: 'approve' | 'reject';
+  /** 'return' sends the request back to the submitter for changes; the step reopens when they resubmit. */
+  decision: 'approve' | 'reject' | 'return';
   comments?: string;
   rejectionReason?: string;
+  /** On return (required): what the submitter should change. */
+  returnReason?: string;
   /** On approve (required): the approver's drawn signature, pen strokes as from the signature pad. */
   signature?: unknown;
   /** The emailed link token, when the approver arrived through it. Verified if present. */
@@ -256,10 +300,14 @@ export async function decideStep(
   user: { userId: number; displayName: string },
   requestStepId: number,
   input: DecisionInput,
-): Promise<{ requestStatus: 'InProgress' | 'Approved' | 'Rejected'; nextStepOrder: number | null }> {
+): Promise<{ requestStatus: 'InProgress' | 'Approved' | 'Rejected' | 'Returned'; nextStepOrder: number | null }> {
   const reason = input.rejectionReason?.trim() ?? '';
   if (input.decision === 'reject' && !reason) {
     throw new AppError(400, 'validation_failed', 'Invalid input', [{ path: 'rejectionReason', message: 'A rejection reason is required' }]);
+  }
+  const returnReason = input.returnReason?.trim() ?? '';
+  if (input.decision === 'return' && !returnReason) {
+    throw new AppError(400, 'validation_failed', 'Invalid input', [{ path: 'returnReason', message: 'Say what needs to change' }]);
   }
   let signature: string | null = null;
   if (input.decision === 'approve') {
@@ -327,6 +375,11 @@ export async function decideStep(
         tx,
       );
       if (!tok?.Ok) throw new AppError(403, 'invalid_link', 'This approval link is invalid, expired or belongs to someone else');
+    }
+
+    if (input.decision === 'return') {
+      await sendBack(tenantId, actor, user, requestStepId, row, returnReason, input.token !== undefined, tx);
+      return { requestStatus: 'Returned' as const, nextStepOrder: null };
     }
 
     const newStepStatus = input.decision === 'approve' ? 'Approved' : 'Rejected';
@@ -494,6 +547,160 @@ export async function decideStep(
 }
 
 // ---------------------------------------------------------------------------------------
+// send back (approver) and resubmit (submitter)
+// ---------------------------------------------------------------------------------------
+/** Active -> Returned. Runs inside decideStep's transaction, after its checks (right user, step Active, link valid). */
+async function sendBack(
+  tenantId: number, actor: Actor, user: { userId: number; displayName: string }, requestStepId: number,
+  row: { RequestId: number; RequestNumber: string; FormName: string; TenantSlug: string; SubmitterUserId: number; SubmitterEmail: string; SubmitterName: string; StepOrder: number; StepName: string; TotalSteps: number; AssignedUserId: number },
+  reason: string, viaLink: boolean, tx: Tx,
+): Promise<void> {
+  const [{ n }] = await tenantQuery<{ n: number }>(
+    tenantId,
+    `UPDATE RequestSteps SET Status = 'Returned' WHERE TenantId = @TenantId AND RequestStepId = @S AND Status = 'Active';
+     SELECT @@ROWCOUNT AS n;`,
+    { S: requestStepId },
+    tx,
+  );
+  if (n !== 1) throw new AppError(409, 'step_already_decided', 'This step has already been completed');
+  // the approver gets a fresh link when it comes back
+  await tenantQuery(
+    tenantId,
+    `UPDATE ApprovalTokens SET RevokedAt = SYSUTCDATETIME()
+      WHERE TenantId = @TenantId AND RequestStepId = @S AND ConsumedAt IS NULL AND RevokedAt IS NULL`,
+    { S: requestStepId },
+    tx,
+  );
+  await tenantQuery(
+    tenantId,
+    `INSERT INTO RequestReturns (TenantId, RequestId, RequestStepId, StepOrder, ReturnedByUserId, Reason)
+     VALUES (@TenantId, @RequestId, @S, @Order, @By, @Reason)`,
+    { RequestId: row.RequestId, S: requestStepId, Order: row.StepOrder, By: user.userId, Reason: reason },
+    tx,
+  );
+  await audit(
+    tenantId,
+    actor,
+    {
+      action: 'step.returned',
+      entityType: 'RequestStep',
+      entityId: requestStepId,
+      requestId: row.RequestId,
+      fromState: 'Active',
+      toState: 'Returned',
+      detail: { stepOrder: row.StepOrder, reason, asDelegate: user.userId !== row.AssignedUserId || undefined, viaLink },
+    },
+    tx,
+  );
+  const base = await tenantBaseUrlBySlug(row.TenantSlug);
+  await queueNotification(
+    tenantId,
+    {
+      type: 'SentBack',
+      to: { userId: row.SubmitterUserId, email: row.SubmitterEmail },
+      subject: `Changes needed: your ${row.FormName} request ${row.RequestNumber}`,
+      bodyHtml: emailBody([
+        `Hello ${row.SubmitterName},`,
+        `${user.displayName} has sent your request back to you for changes.`,
+        { label: 'Request', value: `${row.FormName} ${row.RequestNumber}` },
+        { label: 'Sent back at', value: `Step ${row.StepOrder} of ${row.TotalSteps} - ${row.StepName}` },
+        { label: 'What to change', value: reason },
+        { buttons: [{ link: `${base}/requests/${row.RequestId}/edit`, text: 'Make the changes', tone: 'ok' }] },
+        `Nothing is lost: steps already approved stay approved. When you resubmit, the request goes straight back to step ${row.StepOrder} (${row.StepName}).`,
+      ]),
+      requestId: row.RequestId,
+      requestStepId,
+    },
+    tx,
+  );
+}
+
+/**
+ * The submitter's edited submission after a send-back: replaces the submitted values (validated exactly like a
+ * new submission, against the form as it is now), records what changed, and reopens the step that sent it back.
+ */
+export async function resubmitRequest(
+  tenantId: number,
+  actor: Actor,
+  submitter: { userId: number; email: string; displayName: string },
+  requestId: number,
+  values: Record<string, unknown>,
+  note?: string,
+): Promise<{ requestId: number; stepOrder: number; changes: number }> {
+  return withTx(async (tx) => {
+    const [r] = await tenantQuery<{ Status: string; FormId: number; RequestNumber: string; SubmitterUserId: number; FormName: string; FormDeleted: number; TenantSlug: string }>(
+      tenantId,
+      `SELECT r.Status, r.FormId, r.RequestNumber, r.SubmitterUserId, f.Name AS FormName,
+              CASE WHEN f.DeletedAt IS NULL THEN 0 ELSE 1 END AS FormDeleted, t.Slug AS TenantSlug
+         FROM Requests r WITH (UPDLOCK, ROWLOCK)
+         JOIN Forms f ON f.TenantId = r.TenantId AND f.FormId = r.FormId
+         JOIN Tenants t ON t.TenantId = r.TenantId
+        WHERE r.TenantId = @TenantId AND r.RequestId = @RequestId`,
+      { RequestId: requestId },
+      tx,
+    );
+    // someone else's request looks exactly like a missing one
+    if (!r || r.SubmitterUserId !== submitter.userId) throw new AppError(404, 'not_found', 'Request not found');
+    if (r.Status !== 'InProgress') throw new AppError(409, 'request_closed', `This request is ${r.Status.toLowerCase()} and can no longer be changed`);
+    const [step] = await tenantQuery<{ StepOrder: number }>(
+      tenantId,
+      `SELECT StepOrder FROM RequestSteps WHERE TenantId = @TenantId AND RequestId = @RequestId AND Status = 'Returned'`,
+      { RequestId: requestId },
+      tx,
+    );
+    if (!step) throw new AppError(409, 'not_returned', 'This request has not been sent back to you, so it cannot be changed');
+    if (r.FormDeleted) throw new AppError(409, 'form_deleted', 'This form has been deleted, so the request cannot be resubmitted. Ask an administrator to cancel it.');
+
+    const formFields = await getFormFields(tenantId, r.FormId, tx);
+    const lookupRows = await resolveLookupRows(tenantId, formFields, values, tx);
+    const data = validateValues(formFields, values, { enforceRequired: true }, lookupRows);
+
+    const before = await tenantQuery<{ FieldKey: string; FieldLabel: string; FieldType: string; Value: string | null }>(
+      tenantId,
+      'SELECT FieldKey, FieldLabel, FieldType, Value FROM RequestData WHERE TenantId = @TenantId AND RequestId = @RequestId ORDER BY SortOrder',
+      { RequestId: requestId },
+      tx,
+    );
+    const empty = (v: string | null | undefined) => (v === undefined || v === '' ? null : v);
+    const changes: FieldChange[] = [];
+    for (const { def, value } of data) {
+      const old = before.find((b) => b.FieldKey === def.key);
+      if (empty(old?.Value) !== empty(value)) changes.push({ key: def.key, label: def.label, type: def.type, from: empty(old?.Value), to: empty(value) });
+    }
+    // a field taken off the form since: its old value is gone from the request, so say so
+    for (const old of before) {
+      if (!data.some((d) => d.def.key === old.FieldKey) && empty(old.Value) !== null) changes.push({ key: old.FieldKey, label: old.FieldLabel, type: old.FieldType, from: old.Value, to: null });
+    }
+
+    await tenantQuery(tenantId, 'DELETE FROM RequestData WHERE TenantId = @TenantId AND RequestId = @RequestId', { RequestId: requestId }, tx);
+    await writeRequestData(tenantId, requestId, data, tx);
+    const trimmedNote = note?.trim() || null;
+    await tenantQuery(
+      tenantId,
+      `UPDATE RequestReturns SET ResubmittedAt = SYSUTCDATETIME(), ResubmitNote = @Note, ChangesJson = @Changes
+        WHERE TenantId = @TenantId AND RequestId = @RequestId AND ResubmittedAt IS NULL`,
+      { RequestId: requestId, Note: trimmedNote, Changes: JSON.stringify(changes) },
+      tx,
+    );
+    await audit(
+      tenantId,
+      actor,
+      {
+        action: 'request.resubmitted',
+        entityType: 'Request',
+        entityId: requestId,
+        requestId,
+        detail: { stepOrder: step.StepOrder, changedFields: changes.map((c) => c.key) },
+      },
+      tx,
+    );
+    const ctx: RequestContext = { requestId, requestNumber: r.RequestNumber, formName: r.FormName, tenantSlug: r.TenantSlug, baseUrl: await tenantBaseUrlBySlug(r.TenantSlug), submitter };
+    await activateStep(tenantId, actor, ctx, step.StepOrder, tx, { changes, note: trimmedNote });
+    return { requestId, stepOrder: step.StepOrder, changes: changes.length };
+  });
+}
+
+// ---------------------------------------------------------------------------------------
 // cancel (admin)
 // ---------------------------------------------------------------------------------------
 export async function cancelRequest(tenantId: number, actor: Actor, adminUserId: number, requestId: number, reason: string): Promise<void> {
@@ -522,7 +729,7 @@ export async function cancelRequest(tenantId: number, actor: Actor, adminUserId:
     await tenantQuery(
       tenantId,
       `UPDATE RequestSteps SET Status = 'Cancelled'
-        WHERE TenantId = @TenantId AND RequestId = @RequestId AND Status IN ('Waiting','Active')`,
+        WHERE TenantId = @TenantId AND RequestId = @RequestId AND Status IN ('Waiting','Active','Returned')`,
       { RequestId: requestId },
       tx,
     );
@@ -614,8 +821,7 @@ async function sendStepLink(
         { label: 'Request', value: row.RequestNumber },
         { label: 'Submitted by', value: row.SubmitterName },
         { label: 'Step', value: `${row.StepOrder} of ${row.TotalSteps} - ${row.StepName}` },
-        { link, text: 'Review and decide' },
-        `You will be asked to sign in. This link is personal to you and expires in ${config.auth.approvalTokenTtlDays} days.`,
+        ...(await decisionLines(tenantId, row.RequestId, link, tx)),
       ]),
       requestId: row.RequestId,
       requestStepId,
@@ -631,15 +837,16 @@ async function sendStepLink(
 export async function reassignStep(tenantId: number, actor: Actor, requestStepId: number, newUserId: number, asDelegate: boolean): Promise<void> {
   await withTx(async (tx) => {
     const row = await lockStep(tenantId, requestStepId, tx);
-    if (row.StepStatus !== 'Active' && row.StepStatus !== 'Waiting') throw new AppError(409, 'step_already_decided', 'This step has already been completed');
+    // a Returned step can be handed over too: whoever has it when the submitter resubmits gets it back
+    if (!['Active', 'Waiting', 'Returned'].includes(row.StepStatus)) throw new AppError(409, 'step_already_decided', 'This step has already been completed');
     if (newUserId === row.AssignedUserId) throw new AppError(400, 'same_user', 'That user is already the approver for this step');
     const user = await approverById(tenantId, newUserId, tx);
 
     await tenantQuery(
       tenantId,
       asDelegate
-        ? `UPDATE RequestSteps SET DelegateUserId = @New WHERE TenantId = @TenantId AND RequestStepId = @S AND Status IN ('Active','Waiting')`
-        : `UPDATE RequestSteps SET AssignedUserId = @New, DelegateUserId = NULL WHERE TenantId = @TenantId AND RequestStepId = @S AND Status IN ('Active','Waiting')`,
+        ? `UPDATE RequestSteps SET DelegateUserId = @New WHERE TenantId = @TenantId AND RequestStepId = @S AND Status IN ('Active','Waiting','Returned')`
+        : `UPDATE RequestSteps SET AssignedUserId = @New, DelegateUserId = NULL WHERE TenantId = @TenantId AND RequestStepId = @S AND Status IN ('Active','Waiting','Returned')`,
       { New: newUserId, S: requestStepId },
       tx,
     );
