@@ -208,6 +208,7 @@ module.exports = {
       ['Request not found', 'The request is not yours, or the number is wrong. Submitters can open only their own requests.'],
       ['The PDF has not been generated yet', 'Wait a minute and try again.'],
       ['Too many attempts. Please wait a minute.', 'Sign-in attempts are rate-limited. Wait one minute.'],
+      ['A new version of ApprovalFlow is available', 'The system was updated while your page was open. Choose **Reload** (anything you have typed on this page is lost), or carry on: the next page you open is loaded in the new version by itself.'],
     ] } },
     { h2: 'Good practice' },
     { ul: [

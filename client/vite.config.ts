@@ -14,12 +14,24 @@ const globalConsole = (): Plugin => ({
   },
 });
 
+// Every build gets an id, compiled in as __BUILD_ID__ and written to /version.json, so an open page can tell
+// that a newer version has been deployed since it was loaded (src/version.tsx).
+const BUILD_ID = new Date().toISOString();
+const versionFile = (): Plugin => ({
+  name: 'version-file',
+  apply: 'build',
+  generateBundle() {
+    this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: BUILD_ID }) });
+  },
+});
+
 // In development the API runs on :4100; proxying keeps the browser same-origin so the
 // httpOnly SameSite=Strict refresh cookie works exactly as it will behind IIS.
 // API_TARGET (in client/.env.local or the environment) points the proxy elsewhere, e.g. on a machine
 // where the installed service already owns :4100.
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), globalConsole()],
+  plugins: [react(), globalConsole(), versionFile()],
+  define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
   // Two entry points: the customer portal (index.html) and the global management console
   // (global.html), which IIS serves at /global. They share styles but never share a session.
   build: {

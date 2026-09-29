@@ -30,6 +30,8 @@ module.exports = {
       'Only signed-in people can open the manuals, and only administrators the Administrator Manual. The address of an open manual works for a few minutes only - a copied or bookmarked link stops working, so open it again from **Help**.',
       'The manuals always show the current version: they are updated with the system itself.',
     ] },
+    { h2: 'After the system is updated' },
+    { p: 'When a new version is installed, anyone who already had the portal open sees **A new version of ApprovalFlow is available** with a **Reload** button, and the next page they open is loaded in the new version by itself. Nobody has to clear their browser, and an approver is never left on an old screen that the updated system would refuse.' },
     { h2: 'Light or dark colours' },
     { p: 'The small icon next to **Help** in the top bar (and at the top of the sign-in page) switches between three colour choices, one per click:' },
     { table: { widths: [0.22, 0.78], head: ['Icon', 'Colours'], rows: [

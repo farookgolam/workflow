@@ -6,6 +6,7 @@ import { AuthProvider } from './auth';
 import '@fontsource-variable/outfit';
 import './styles.css';
 import { applyTheme, storedTheme } from './theme';
+import { UpdateWatcher } from './version';
 
 applyTheme(storedTheme());
 
@@ -14,6 +15,7 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <AuthProvider>
         <App />
+        <UpdateWatcher />
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,

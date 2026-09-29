@@ -424,3 +424,12 @@ nav.seg a.on { background: var(--yellow); color: var(--ink); font-weight: 600; }
 .auth-brand .theme-toggle { color: #b9b6ab; margin-left: auto; }
 .auth-top { display: flex; align-items: center; gap: 1rem; }
 
+
+/* ---- a newer version has been deployed (version.tsx) ---- */
+.update-banner {
+  position: fixed; left: 50%; bottom: 1rem; transform: translateX(-50%); z-index: 50;
+  display: flex; align-items: center; gap: .9rem; max-width: calc(100vw - 2rem);
+  padding: .6rem .7rem .6rem 1rem; border-radius: var(--radius);
+  background: var(--bar); color: var(--bar-text); box-shadow: 0 4px 16px rgb(8 8 3 / .25);
+}
+.update-banner button { white-space: nowrap; }
