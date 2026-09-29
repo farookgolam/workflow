@@ -34,6 +34,7 @@ DENY DELETE ON dbo.RequestData           TO [DOMAIN\svc-approvalflow];
 DENY UPDATE, DELETE ON dbo.SchemaMigrations TO [DOMAIN\svc-approvalflow];
 DENY UPDATE, DELETE ON dbo.RequestDocuments TO [DOMAIN\svc-approvalflow]; -- archived PDFs (migration 019)
 DENY UPDATE ON dbo.StepAttachments TO [DOMAIN\svc-approvalflow]; -- DELETE stays: an open step's files can be removed (migration 024's trigger)
+DENY DELETE ON dbo.RequestReturns TO [DOMAIN\svc-approvalflow]; -- send-back history (migration 027); UPDATE stays: a round is completed on resubmit
 
 -- The one way to remove a customer's history: a global administrator removing a suspended customer
 -- (migration 016). The procedure checks that itself; the DENYs above still apply everywhere else.

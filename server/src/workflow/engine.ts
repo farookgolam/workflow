@@ -667,13 +667,21 @@ export async function resubmitRequest(
       const old = before.find((b) => b.FieldKey === def.key);
       if (empty(old?.Value) !== empty(value)) changes.push({ key: def.key, label: def.label, type: def.type, from: empty(old?.Value), to: empty(value) });
     }
-    // a field taken off the form since: its old value is gone from the request, so say so
-    for (const old of before) {
-      if (!data.some((d) => d.def.key === old.FieldKey) && empty(old.Value) !== null) changes.push({ key: old.FieldKey, label: old.FieldLabel, type: old.FieldType, from: old.Value, to: null });
+    // Values are changed in place, never deleted: the runtime account is DENYed DELETE on RequestData
+    // (scripts/grant-app-permissions.sql). A field taken off the form since keeps its old row untouched.
+    for (const { def, value } of data) {
+      if (!before.some((b) => b.FieldKey === def.key)) {
+        await writeRequestData(tenantId, requestId, [{ def, value }], tx);
+        continue;
+      }
+      await tenantQuery(
+        tenantId,
+        `UPDATE RequestData SET FieldId = @FieldId, FieldLabel = @Label, FieldType = @Type, SortOrder = @Sort, Value = @Value
+          WHERE TenantId = @TenantId AND RequestId = @RequestId AND FieldKey = @Key`,
+        { RequestId: requestId, FieldId: def.id, Key: def.key, Label: def.label, Type: def.type, Sort: def.sortOrder, Value: value },
+        tx,
+      );
     }
-
-    await tenantQuery(tenantId, 'DELETE FROM RequestData WHERE TenantId = @TenantId AND RequestId = @RequestId', { RequestId: requestId }, tx);
-    await writeRequestData(tenantId, requestId, data, tx);
     const trimmedNote = note?.trim() || null;
     await tenantQuery(
       tenantId,
