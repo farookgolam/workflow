@@ -14,7 +14,7 @@ export interface AuditRow {
   toState: string | null;
 }
 
-const M = { left: 50, right: 50, top: 92, bottom: 56 };
+const M = { left: 50, right: 50, top: 96, bottom: 56 };
 const COLORS = { approved: '#166534', rejected: '#b42318', text: '#111827', muted: '#6b7280', rule: '#d1d5db', soft: '#f3f4f6' };
 
 // Arial (present on every Windows Server) is embedded for full Unicode coverage; the built-in
@@ -41,12 +41,20 @@ function display(f: FieldValue): string {
   return f.value;
 }
 
+/** The customer at the top of every page: its name, and its logo when that is a PNG or JPEG (the only images PDFKit can embed). */
+export interface PdfBrand {
+  name: string;
+  logoDataUrl: string | null;
+}
+
+const EMBEDDABLE_LOGO = /^data:image\/(png|jpe?g);base64,[A-Za-z0-9+/=\s]+$/;
+
 /**
  * One PDF for both outcomes. Approved and Rejected differ only in the banner, the title and
  * the rejection block; content is: request summary, full submission, every completed approver
  * section (name, decision, fields, comments, timestamp), then the audit summary.
  */
-export function buildRequestPdf(d: RequestDetail, auditRows: AuditRow[]): Promise<Buffer> {
+export function buildRequestPdf(d: RequestDetail, auditRows: AuditRow[], brand?: PdfBrand): Promise<Buffer> {
   const rejected = d.status === 'Rejected';
   const banner = rejected ? 'REJECTED' : 'APPROVED';
   const doc = new PDFDocument({
@@ -66,11 +74,41 @@ export function buildRequestPdf(d: RequestDetail, auditRows: AuditRow[]): Promis
   const width = doc.page.width - M.left - M.right;
   const bottom = () => doc.page.height - M.bottom;
 
+  // Header on every page: the customer's logo and name on the left; the outcome, form and request number on the right;
+  // and a band in the outcome's colour underneath, so the result is plain at a glance on any page.
+  const statusColor = rejected ? COLORS.rejected : COLORS.approved;
+  // the logo is read once (and embedded once, however many pages), scaled to fit 130 x 40 without stretching
+  let logo: { img: unknown; w: number; h: number } | null = null;
+  if (brand?.logoDataUrl && EMBEDDABLE_LOGO.test(brand.logoDataUrl)) {
+    try {
+      const img = (doc as unknown as { openImage(src: string): { width: number; height: number } }).openImage(brand.logoDataUrl);
+      const scale = Math.min(130 / img.width, 40 / img.height);
+      logo = { img, w: img.width * scale, h: img.height * scale };
+    } catch {
+      logo = null; // not a readable PNG/JPEG after all: the name alone
+    }
+  }
   const drawBanner = () => {
     doc.save();
-    doc.rect(0, 0, doc.page.width, 64).fill(rejected ? COLORS.rejected : COLORS.approved);
-    doc.fillColor('#ffffff').font(FONT.bold).fontSize(22).text(banner, M.left, 20, { lineBreak: false });
-    doc.font(FONT.regular).fontSize(10).text(`${d.formName}  |  ${d.requestNumber}`, M.left, 27, { width, align: 'right', lineBreak: false });
+    let nameX = M.left;
+    if (logo) {
+      doc.image(logo.img as PDFKit.Mixins.ImageSrc, M.left, 16 + (40 - logo.h) / 2, { width: logo.w, height: logo.h });
+      nameX = M.left + logo.w + 12;
+    }
+    const rightW = 170;
+    if (brand?.name) {
+      doc.fillColor(COLORS.text).font(FONT.bold).fontSize(14)
+        .text(brand.name, nameX, 28, { width: M.left + width - rightW - 10 - nameX, height: 20, ellipsis: true, lineBreak: false });
+    }
+    // outcome badge, then form and number under it
+    doc.font(FONT.bold).fontSize(11);
+    const badgeW = doc.widthOfString(banner) + 20;
+    const badgeX = M.left + width - badgeW;
+    doc.roundedRect(badgeX, 18, badgeW, 20, 4).fill(statusColor);
+    doc.fillColor('#ffffff').text(banner, badgeX, 23.5, { width: badgeW, align: 'center', lineBreak: false });
+    doc.fillColor(COLORS.muted).font(FONT.regular).fontSize(9)
+      .text(`${d.formName}  |  ${d.requestNumber}`, M.left + width - rightW, 44, { width: rightW, align: 'right', height: 12, ellipsis: true, lineBreak: false });
+    doc.rect(0, 66, doc.page.width, 4).fill(statusColor);
     doc.restore();
     doc.fillColor(COLORS.text).font(FONT.regular).fontSize(10);
     doc.x = M.left;
@@ -179,7 +217,6 @@ export function buildRequestPdf(d: RequestDetail, auditRows: AuditRow[]): Promis
     row('Approver', s.actedBy ?? s.assignedTo);
     row('Decision', s.status);
     row('Date', fmt(s.actedAt));
-    if (s.actedIp) row('IP address', s.actedIp);
     fields(s.responses);
     if (s.comments) row('Comments', s.comments);
     if (s.signature) drawnSignature({ key: 'signature', label: 'Signature', type: 'sigpad', value: s.signature });
@@ -195,7 +232,7 @@ export function buildRequestPdf(d: RequestDetail, auditRows: AuditRow[]): Promis
 
   // ---- audit summary ----
   heading('Audit summary');
-  const cols = [118, 150, 125, width - 393];
+  const cols = [125, width - 125 - 170, 170];
   const auditLine = (cells: string[], bold = false) => {
     doc.font(bold ? FONT.bold : FONT.regular).fontSize(8);
     const h = Math.max(...cells.map((c, i) => doc.heightOfString(c, { width: cols[i] - 6 })));
@@ -210,9 +247,9 @@ export function buildRequestPdf(d: RequestDetail, auditRows: AuditRow[]): Promis
     doc.y = y + h + 4;
     doc.x = M.left;
   };
-  auditLine(['Time', 'Event', 'User', 'IP address'], true);
+  auditLine(['Time', 'Event', 'User'], true);
   for (const a of auditRows) {
-    auditLine([fmt(a.occurredAt), a.action + (a.toState ? `  (${a.fromState ?? '-'} > ${a.toState})` : ''), a.userName ?? 'System', a.ip ?? '-']);
+    auditLine([fmt(a.occurredAt), a.action + (a.toState ? `  (${a.fromState ?? '-'} > ${a.toState})` : ''), a.userName ?? 'System']);
   }
 
   // ---- footer on every page ----

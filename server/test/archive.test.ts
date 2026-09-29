@@ -177,3 +177,34 @@ describe('SharePoint is gone', () => {
     expect((await request(app).get(`${api}/admin/sharepoint/resolve?siteUrl=https://x.sharepoint.com/sites/a`).set(bearer(tok.admin))).status).toBe(404);
   });
 });
+
+describe('page header', () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  // the page text, put back together from the hex pieces PDFKit writes (split wherever it kerns)
+  const textOf = (pdf: string) =>
+    [...pdf.matchAll(/\[(.*?)\] TJ/g)].map((m) => [...m[1].matchAll(/<([0-9a-f]*)>/g)].map((h) => Buffer.from(h[1], 'hex').toString('latin1')).join('')).join('\n');
+  const pdfOf = async (outcome: 'approve' | 'reject') => {
+    const requestId = await closedRequest(outcome);
+    await processArchive({ tenantId: t.tenantId });
+    return (await storedPdf(requestId)).Content.toString('latin1');
+  };
+  const brand = (body: Record<string, unknown>) => request(app).patch(`${api}/admin/settings`).set(bearer(tok.admin)).send(body);
+
+  it("shows the customer's display name and PNG logo with the outcome on the page", async () => {
+    expect((await brand({ brandName: 'Acme Schools', logoDataUrl: PNG })).status).toBe(200);
+    const pdf = await pdfOf('approve');
+    expect(textOf(pdf)).toContain('Acme Schools');
+    expect(pdf).toMatch(/\/Subtype \/Image/);
+    expect(textOf(pdf)).toContain('APPROVED');
+    expect(textOf(pdf)).not.toContain('IP address'); // kept in the audit log, not printed
+    expect(textOf(await pdfOf('reject'))).toContain('REJECTED');
+  });
+
+  it("falls back to the organisation's own name, and to no logo for an image PDFs cannot embed", async () => {
+    expect((await brand({ brandName: null, logoDataUrl: 'data:image/svg+xml;base64,PHN2Zy8+' })).status).toBe(200);
+    const [{ Name }] = await tenantQuery<{ Name: string }>(t.tenantId, 'SELECT Name FROM Tenants WHERE TenantId = @TenantId');
+    const pdf = await pdfOf('approve');
+    expect(textOf(pdf)).toContain(Name);
+    expect(pdf).not.toMatch(/\/Subtype \/Image/);
+  });
+});

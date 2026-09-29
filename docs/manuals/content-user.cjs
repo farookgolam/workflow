@@ -116,7 +116,7 @@ module.exports = {
       'Choose **Download archived PDF** for the full record of the rejected request.',
     ] },
     { h2: 'Downloading the PDF' },
-    { p: 'When a request is Approved or Rejected, a PDF is produced within a minute or so. It contains your submission, every completed approver section with name, decision, comments, the approver\'s **signature** and time, and an audit summary. Rejected PDFs carry a red **REJECTED** banner. If the button says the PDF is being prepared, refresh the page shortly.' },
+    { p: 'When a request is Approved or Rejected, a PDF is produced within a minute or so. It contains your submission, every completed approver section with name, decision, comments, the approver\'s **signature** and time, and an audit summary. Each page shows your organisation\'s name and logo at the top, with a green **APPROVED** or red **REJECTED** badge. If the button says the PDF is being prepared, refresh the page shortly.' },
     { h2: 'Emails you will receive' },
     { table: { widths: [0.4, 0.6], head: ['Email', 'When'], rows: [
       ['We received your ... request', 'Immediately after you submit.'],

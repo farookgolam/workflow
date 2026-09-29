@@ -14,7 +14,8 @@ import { config } from '../config';
 import { tenantQuery, unscopedQuery, withTx, type Tx } from '../db/query';
 import { dayFolder, fileRootFor, readCustomerFile, removeCustomerFile, writeCustomerFile } from '../customer-files/files';
 import { loadRequestDetail } from '../workflow/read';
-import { archiveFileName, buildRequestPdf, type AuditRow } from './pdf';
+import { archiveFileName, buildRequestPdf, type AuditRow, type PdfBrand } from './pdf';
+import { effectiveSettings } from '../settings/service';
 
 const LEASE_MINUTES = 10;
 
@@ -51,6 +52,13 @@ async function claim(c: Candidate): Promise<boolean> {
   return n === 1;
 }
 
+/** The customer's name (its display name from Settings, else its own) and logo, for the PDF header. */
+async function pdfBrand(tenantId: number): Promise<PdfBrand> {
+  const { brand } = await effectiveSettings(tenantId);
+  const [t] = await tenantQuery<{ Name: string }>(tenantId, 'SELECT Name FROM Tenants WHERE TenantId = @TenantId');
+  return { name: brand.name ?? t?.Name ?? '', logoDataUrl: brand.logoDataUrl };
+}
+
 async function generatePdf(c: Candidate): Promise<void> {
   const detail = await loadRequestDetail(c.TenantId, c.RequestId);
   if (!detail) return;
@@ -65,7 +73,7 @@ async function generatePdf(c: Candidate): Promise<void> {
   );
   const auditRows: AuditRow[] = rows.map((r) => ({ occurredAt: r.OccurredAt, action: r.Action, userName: r.DisplayName, ip: r.IpAddress, fromState: r.FromState, toState: r.ToState }));
 
-  const pdf = await buildRequestPdf(detail, auditRows);
+  const pdf = await buildRequestPdf(detail, auditRows, await pdfBrand(c.TenantId));
   const fileName = archiveFileName(detail);
   const sha = crypto.createHash('sha256').update(pdf).digest();
 

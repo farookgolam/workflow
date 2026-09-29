@@ -90,6 +90,7 @@ export function SettingsForm({ settings, save, title }: { settings: TenantSettin
           <input id="logo" type="file" accept="image/*" onChange={(e) => chooseLogo(e.target.files?.[0])} />
           {logo && <button type="button" className="link" onClick={() => setLogo(null)}>Remove the logo</button>}
           {logoError && <p className="field-error">{logoError}</p>}
+          <p className="hint">Shown on the sign-in page and at the top of every page of the approved and rejected PDFs. Use a PNG or JPG for the PDFs (other image types appear on screen only; the PDF then shows the name alone).</p>
         </div>
       </section>
 

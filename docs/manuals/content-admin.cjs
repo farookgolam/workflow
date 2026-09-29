@@ -524,6 +524,7 @@ module.exports = {
     { p: '**impersonatedByPlatformAdmin** in the detail of an entry means it was done during a provider support session rather than by the named person themselves (chapter 11).' },
 
     { h1: 'PDF archive' },
+    { p: 'Every page of the PDF starts with your **logo and display name** (from **Settings > Branding**) on the left, and on the right the outcome - a green **APPROVED** or red **REJECTED** badge - with the form name and request number, above a band in the same colour. The PDF uses the branding as it is when the request closes.' },
     { p: 'When a request is approved or rejected, a PDF of the complete record, including every approver\'s **signature**, is made and **kept in the database** (or in your organisation\'s own file folder - see below). From there it can be downloaded from the request page by administrators, by the submitter, and by the approvers of that request. A stored PDF can never be changed or deleted - not even by an administrator - so it stays a faithful record of what was decided.' },
     { p: 'The PDF is made **after** the decision is saved and the submitter\'s email is queued, so it never delays notifications. There is nothing to set up: every organisation\'s PDFs are kept this way. To take PDFs elsewhere, download them from the request page, or list requests on the **Reports** page.' },
     { table: { widths: [0.24, 0.76], head: ['Archive status', 'Meaning'], rows: [
@@ -562,9 +563,9 @@ module.exports = {
 
     { h2: 'Branding' },
     { table: { widths: [0.26, 0.74], head: ['Setting', 'What it does'], rows: [
-      ['Display name', 'The name shown on the sign-in page and in the top-left of the portal. Blank uses your organisation name.'],
+      ['Display name', 'The name shown on the sign-in page, in the top-left of the portal and at the top of every page of the PDFs. Blank uses your organisation name.'],
       ['Accent colour', 'The colour of buttons, links and highlights. Choose one with enough contrast against white; **Use the default** puts it back.'],
-      ['Logo', 'A small image shown above the sign-in form and beside the name in the header. Keep it under 300 KB; a wide image of roughly 200 by 48 pixels works best. **Remove the logo** clears it.'],
+      ['Logo', 'A small image shown above the sign-in form and beside the name in the header. Keep it under 300 KB; a wide image of roughly 200 by 48 pixels works best. It is also printed at the top of every page of the PDFs - use a **PNG or JPG** for that; other image types appear on screen only, and the PDF then shows the name alone. **Remove the logo** clears it.'],
     ] } },
     { p: 'Branding is what tells people they are in the right place, so use the name your colleagues recognise rather than a legal entity name.' },
 
