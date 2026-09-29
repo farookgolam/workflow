@@ -109,7 +109,7 @@ adminFormsRouter.get('/:formId', async (req, res) => {
 
   const steps = await tenantQuery<Record<string, any>>(
     tenantId,
-    `SELECT s.StepId, s.Name, s.ApproverUserId, s.ApproverChosen, s.ApproverListLookupId, s.ApproverListEmailColumn, s.ApproverListNameColumn, s.ApproverListColumnsJson, s.ReminderAfterDays, s.ReminderRepeatDays, s.EscalateAfterDays, s.EscalateToUserId, s.AllowAttachments, c.Version
+    `SELECT s.StepId, s.Name, s.ApproverUserId, s.ApproverChosen, s.ApproverListLookupId, s.ApproverListEmailColumn, s.ApproverListNameColumn, s.ApproverListColumnsJson, s.ReminderAfterDays, s.ReminderRepeatDays, s.EscalateAfterDays, s.EscalateToUserId, c.Version
        FROM ApprovalChains c JOIN ApprovalSteps s ON s.TenantId = c.TenantId AND s.ChainId = c.ChainId
       WHERE c.TenantId = @TenantId AND c.FormId = @FormId AND c.IsCurrent = 1 ORDER BY s.StepOrder`,
     { FormId: formId },
@@ -121,7 +121,7 @@ adminFormsRouter.get('/:formId', async (req, res) => {
     steps: steps.map((s) => ({
         name: s.Name, approverUserId: s.ApproverChosen ? null : s.ApproverUserId,
         chosen: s.ApproverChosen ? { lookupId: s.ApproverListLookupId, emailColumn: s.ApproverListEmailColumn, nameColumn: s.ApproverListNameColumn, columns: JSON.parse(s.ApproverListColumnsJson ?? '[]') } : null, reminderAfterDays: s.ReminderAfterDays, reminderRepeatDays: s.ReminderRepeatDays,
-        escalateAfterDays: s.EscalateAfterDays, escalateToUserId: s.EscalateToUserId, allowAttachments: s.AllowAttachments,
+        escalateAfterDays: s.EscalateAfterDays, escalateToUserId: s.EscalateToUserId,
       })),
   });
 });

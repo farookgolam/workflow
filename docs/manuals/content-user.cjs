@@ -141,12 +141,12 @@ module.exports = {
     { table: { widths: [0.3, 0.7], head: ['Section', 'Contents'], rows: [
       ['Original submission', 'Everything the submitter entered. **Read-only.**'],
       ['Previous approvals', 'Each earlier step: approver, decision, date, their comments, their **signature** and any documents they attached (and, on older requests, any fields they completed). **Read-only.** Not shown on Step 1. You never see later steps.'],
-      ['Your section', 'A **Comments** box, **Attach documents** on steps that allow it, the **Your signature** box, the **Send to** box when you choose the next approver, and the **Approve** and **Reject...** buttons. Highlighted with a blue outline.'],
+      ['Your section', 'A **Comments** box, **Attach documents**, the **Your signature** box, the **Send to** box when you choose the next approver, and the **Approve** and **Reject...** buttons. Highlighted with a blue outline.'],
     ] } },
     { h2: 'To approve' },
     { ol: [
       'Read the submission and add comments if you wish. The system records your account, the time and your IP address with your decision.',
-      'If the step allows it, attach any documents that support your decision under **Attach documents** (see below). This is optional.',
+      'Attach any documents that support your decision under **Attach documents** (see below). This is optional.',
       '**Sign** in the **Your signature** box with your finger, a stylus or the mouse. Every step needs a signature to approve; **Undo** removes the last stroke and **Clear** starts again. If you choose Approve without signing, the box turns red with **Sign to approve**.',
       'If a **Send to** box appears next to **Approve**, choose who approves the next step from its list - their details fill in beside it. You must pick someone before approving; you cannot choose yourself or the person who submitted the request. Rejecting needs no choice.',
       'Choose **Approve**. If you chose who is next, they are emailed a link straight away.',
@@ -154,7 +154,7 @@ module.exports = {
     { p: 'A green message confirms the result: either the request has moved to the next step, or - if yours was the last step - it is fully approved and the submitter has been notified.' },
     { p: 'Your signature is kept with your decision. It is shown to the approvers of later steps and to administrators, and it is printed in the PDF of the request, which the submitter can also download.' },
     { h2: 'Attaching documents' },
-    { p: 'On steps where the administrator allows it, your section has **Attach documents**. Choose **Choose Files** and pick one or more files.' },
+    { p: 'Every step has **Attach documents** in your section. Choose **Choose Files** and pick one or more files.' },
     { ul: [
       'Allowed: PDF, Word, Excel, PowerPoint, text files and images, up to **10 MB** each and **10 files** per step.',
       'Until you decide, you can **Remove** a file you attached. Once you approve or reject, the files are part of the record and cannot be changed.',

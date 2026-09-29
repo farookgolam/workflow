@@ -57,7 +57,6 @@ interface ApprovalView {
     status: string;
     canAct: boolean;
     dueAt: string | null;
-    allowAttachments: boolean;
     attachments: Attachment[];
     nextStep: StepHandOff | null; // who the request goes to if this step is approved (null on the last step)
     decided: { decision: string; actedBy: string | null; actedAt: string | null; comments: string | null; responses: FieldValue[]; signature: string | null } | null;
@@ -192,9 +191,7 @@ export function ApprovalPage() {
               <label htmlFor="comments">Comments</label>
               <textarea id="comments" rows={3} maxLength={4000} value={comments} disabled={busy} onChange={(e) => setComments(e.target.value)} />
             </div>
-            {step.allowAttachments && (
-              <AttachmentUploader requestStepId={step.requestStepId} requestId={request.requestId} items={step.attachments} max={10} disabled={busy} onChange={load} />
-            )}
+            <AttachmentUploader requestStepId={step.requestStepId} requestId={request.requestId} items={step.attachments} max={10} disabled={busy} onChange={load} />
 
             {rejecting ? (
               <div className="reject-box">

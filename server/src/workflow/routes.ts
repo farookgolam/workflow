@@ -212,7 +212,6 @@ approvalsRouter.get('/:requestStepId', async (req, res) => {
       canAct,
       dueAt: step.dueAt,
       // documents this step's approver attached; they can add and remove them only while canAct
-      allowAttachments: step.allowAttachments,
       attachments: step.attachments,
       // populated once decided
       // the step this one hands over to when approved (null on the last step)

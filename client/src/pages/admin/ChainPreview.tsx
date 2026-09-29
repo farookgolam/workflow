@@ -13,7 +13,7 @@ import { FormPreview, fieldProblems, type StoredValue } from './FormBuilder';
 
 /** How a step's approver is found: `approverUserId` - always this person; `chosen` - picked by the person before, from a lookup file or (no lookupId) from every approver. */
 export interface ChosenFrom { lookupId: number | null; emailColumn: string | null; nameColumn: string | null; columns: string[] }
-export interface StepDef { name: string; approverUserId: number | null; chosen: ChosenFrom | null; reminderAfterDays: number | null; reminderRepeatDays: number | null; escalateAfterDays: number | null; escalateToUserId: number | null; allowAttachments?: boolean }
+export interface StepDef { name: string; approverUserId: number | null; chosen: ChosenFrom | null; reminderAfterDays: number | null; reminderRepeatDays: number | null; escalateAfterDays: number | null; escalateToUserId: number | null }
 
 /** A step as the server takes it, for publishing or previewing. */
 export const toChainStep = (s: StepDef) => ({
@@ -21,7 +21,6 @@ export const toChainStep = (s: StepDef) => ({
   approverUserId: s.chosen ? null : s.approverUserId,
   chosen: s.chosen && (s.chosen.lookupId ? s.chosen : { lookupId: null, emailColumn: null, nameColumn: null, columns: [] }),
   reminderAfterDays: s.reminderAfterDays, reminderRepeatDays: s.reminderRepeatDays, escalateAfterDays: s.escalateAfterDays, escalateToUserId: s.escalateToUserId,
-  allowAttachments: !!s.allowAttachments,
 });
 
 /** What stops a step from being published: nobody to go to, or a lookup file without its email column. */

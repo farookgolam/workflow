@@ -244,7 +244,6 @@ module.exports = {
       ['Then repeat every (days)', 'Further reminders. Leave empty for a single reminder. At most 10 reminders are sent per step.'],
       ['Escalate after (days)', 'One escalation notice if the step is still undecided.'],
       ['Escalate to', 'Who receives the escalation. "Administrators" sends it to the organisation\'s admin notification address, or to all active admins.'],
-      ['Documents', 'Tick **Approver can attach documents** to let this step\'s approver attach files - PDF, Word, Excel, PowerPoint, text and images, up to 10 files of 10 MB. Off unless you tick it. See **Approver documents** below.'],
     ] } },
     { h2: 'Who approves each step' },
     { p: 'Every step has a **Who approves this step** box at the top. Choose one of:' },
@@ -277,7 +276,7 @@ module.exports = {
       'Steps approved before signatures were introduced have none; their PDF simply leaves the line out.',
     ] },
     { h2: 'Approver documents' },
-    { p: 'On a step with **Approver can attach documents** ticked, the approver sees **Attach documents** in their section and can add supporting files - a quote, an invoice, a signed letter.' },
+    { p: 'On every step of every form, the approver sees **Attach documents** in their section and can add supporting files - a quote, an invoice, a signed letter.' },
     { ul: [
       'PDF, Word, Excel, PowerPoint, text files and images, up to **10 MB** each and **10 files** per step. The file must really be what its name says: a renamed file of another type is refused.',
       'The approver can remove a file until they decide. After that the files are part of the record and nobody - not even an administrator - can change or delete them.',

@@ -1,4 +1,5 @@
-// Documents an approver attaches on a step whose AllowAttachments is on (migration 024).
+// Documents an approver attaches to their step (migration 024). Every step allows them; the per-step
+// ApprovalSteps.AllowAttachments setting of 024 is no longer used.
 //
 // The file travels as the raw request body (application/octet-stream) with its name in ?name=, like the
 // lookup import. Who may do what:
@@ -67,19 +68,17 @@ async function openStepFor(tenantId: number, userId: number, requestStepId: numb
   if (!owner) throw new AppError(404, 'not_found', 'Approval step not found');
   // the same lock a decision takes, so a file can't be added or removed while the step is being decided
   await tenantQuery(tenantId, 'SELECT RequestId FROM Requests WITH (UPDLOCK, ROWLOCK) WHERE TenantId = @TenantId AND RequestId = @RequestId', { RequestId: owner.RequestId }, tx);
-  const [s] = await tenantQuery<{ RequestId: number; RequestStatus: string; StepStatus: string; AssignedUserId: number; DelegateUserId: number | null; AllowAttachments: boolean }>(
+  const [s] = await tenantQuery<{ RequestId: number; RequestStatus: string; StepStatus: string; AssignedUserId: number; DelegateUserId: number | null }>(
     tenantId,
-    `SELECT rs.RequestId, r.Status AS RequestStatus, rs.Status AS StepStatus, rs.AssignedUserId, rs.DelegateUserId, st.AllowAttachments
+    `SELECT rs.RequestId, r.Status AS RequestStatus, rs.Status AS StepStatus, rs.AssignedUserId, rs.DelegateUserId
        FROM RequestSteps rs
        JOIN Requests r ON r.TenantId = rs.TenantId AND r.RequestId = rs.RequestId
-       JOIN ApprovalSteps st ON st.TenantId = rs.TenantId AND st.StepId = rs.StepId
       WHERE rs.TenantId = @TenantId AND rs.RequestStepId = @RequestStepId`,
     { RequestStepId: requestStepId },
     tx,
   );
   if (!s || (userId !== s.AssignedUserId && userId !== s.DelegateUserId)) throw new AppError(404, 'not_found', 'Approval step not found');
   if (s.RequestStatus !== 'InProgress' || s.StepStatus !== 'Active') throw new AppError(409, 'step_closed', 'This step has already been decided');
-  if (!s.AllowAttachments) throw new AppError(409, 'attachments_off', 'Attachments are not allowed on this step');
   return s;
 }
 

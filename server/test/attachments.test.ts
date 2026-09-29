@@ -45,9 +45,9 @@ beforeAll(async () => {
   formId = form.body.formId;
   const chain = await request(app).put(`${api}/admin/forms/${formId}/chain`).set(bearer(tok.admin)).send({
     steps: [
-      { name: 'Manager', approverUserId: ids.ann, allowAttachments: true },
-      { name: 'Finance', approverUserId: ids.bob },
-      { name: 'Director', approverUserId: ids.cat, allowAttachments: true },
+      { name: 'Manager', approverUserId: ids.ann },
+      { name: 'Finance', approverUserId: ids.bob, allowAttachments: false }, // the old setting is ignored
+      { name: 'Director', approverUserId: ids.cat },
     ],
   });
   expect(chain.status).toBe(200);
@@ -55,9 +55,12 @@ beforeAll(async () => {
 afterAll(closePool);
 
 describe('step attachments', () => {
-  it('the step setting is saved and read back in the form builder, off by default', async () => {
+  it('every step allows attachments: there is no setting to turn them off', async () => {
     const res = await request(app).get(`${api}/admin/forms/${formId}`).set(bearer(tok.admin));
-    expect(res.body.steps.map((s: { allowAttachments: boolean }) => s.allowAttachments)).toEqual([true, false, true]);
+    expect(res.body.steps.every((s: object) => !('allowAttachments' in s))).toBe(true);
+    const { steps } = await newRequest();
+    await decide('ann', steps[0]);
+    expect((await upload('bob', steps[1], 'x.pdf', PDF)).status).toBe(201); // the step once published with allowAttachments: false
   });
 
   it('an approver attaches documents on an allowed step; later approvers and admins see them, the submitter never', async () => {
@@ -68,7 +71,7 @@ describe('step attachments', () => {
     const attachmentId = added.body.attachment.attachmentId;
 
     const mine = await view('ann', steps[0]);
-    expect(mine.body.step).toMatchObject({ allowAttachments: true, attachments: [expect.objectContaining({ fileName: 'quote.pdf', uploadedBy: 'ANN' })] });
+    expect(mine.body.step).toMatchObject({ attachments: [expect.objectContaining({ fileName: 'quote.pdf', uploadedBy: 'ANN' })] });
 
     expect((await decide('ann', steps[0])).status).toBe(200);
 
@@ -113,13 +116,9 @@ describe('step attachments', () => {
     expect((await approverGet('cat', requestId, later.body.attachment.attachmentId)).status).toBe(200);
   });
 
-  it('refuses steps without the option, other people, and files that are not what they claim', async () => {
+  it('refuses other people, and files that are not what they claim', async () => {
     const { steps } = await newRequest();
     expect((await upload('bob', steps[0], 'x.pdf', PDF)).status).toBe(404); // not their step
-    await decide('ann', steps[0]);
-    const off = await upload('bob', steps[1], 'x.pdf', PDF);
-    expect(off.status).toBe(409);
-    expect(off.body.error.code).toBe('attachments_off');
 
     const { steps: s2 } = await newRequest();
     expect((await upload('ann', s2[0], 'tool.exe', Buffer.from('MZ....'))).body.error.code).toBe('file_type');

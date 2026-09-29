@@ -34,7 +34,7 @@ async function customerWithFolder(folder: string) {
   const ann = (await login(slug, 'ann@files.test')).body.accessToken;
   const sam = (await login(slug, 'sam@files.test')).body.accessToken;
   const formId = (await request(app).post(`${api}/admin/forms`).set(bearer(admin)).send({ name: 'Order', slug: 'order', fields: [{ key: 'title', label: 'Title', type: 'text', required: true }] })).body.formId;
-  await request(app).put(`${api}/admin/forms/${formId}/chain`).set(bearer(admin)).send({ steps: [{ name: 'Check', approverUserId: annId, allowAttachments: true }] });
+  await request(app).put(`${api}/admin/forms/${formId}/chain`).set(bearer(admin)).send({ steps: [{ name: 'Check', approverUserId: annId }] });
   return { slug, tenantId, created: created.body.tenant, admin, ann, sam, formId };
 }
 

@@ -308,11 +308,6 @@ export function AdminFormEditor() {
               <label>Escalate to<select value={s.escalateToUserId ?? ''} onChange={(e) => patchStep(i, { escalateToUserId: e.target.value ? Number(e.target.value) : null })}><option value="">Administrators</option>{users.filter((u) => u.isActive).map((u) => <option key={u.userId} value={u.userId}>{u.displayName}</option>)}</select></label>
               </div>
             </fieldset>
-            <fieldset className="b-auto step-group">
-              <legend>Documents</legend>
-              <label className="check"><input type="checkbox" checked={!!s.allowAttachments} onChange={(e) => patchStep(i, { allowAttachments: e.target.checked })} /><span>Approver can attach documents (PDF, Word, Excel, PowerPoint, text, images; up to 10 files of 10 MB)</span></label>
-              <p className="hint">Only approvers and administrators see these files, never the submitter.</p>
-            </fieldset>
           </div>
         ))}
         <div className="actions">
