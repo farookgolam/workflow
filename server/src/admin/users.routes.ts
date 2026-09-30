@@ -8,9 +8,7 @@ import { assertDomainAllowed, resetPasswordKey } from '../auth/signup';
 import { tenantQuery, withTx, type Tx } from '../db/query';
 import { AppError } from '../http/errors';
 import { LIMITS as SHEET_LIMITS, parseWorkbook } from '../lookups/service';
-import { emailBody, queueNotification } from '../notifications/outbox';
-import { tenantById, tenantBaseUrl } from '../tenant';
-import { createUser, normalizeEmail } from '../users/service';
+import { createUser, normalizeEmail, queueAccountCreatedEmail } from '../users/service';
 import { idParam } from '../workflow/routes';
 
 // Mounted behind requireAuth + requireRole('Admin').
@@ -36,21 +34,7 @@ async function addUser(req: Request, input: { email: string; displayName: string
   const { tenantId } = req.user!;
   const userId = await createUser(tenantId, { email: input.email, displayName: input.displayName, roles: input.roles, passwordHash: await unusablePasswordHash(), passwordSet: false }, tx);
   await audit(tenantId, actorFrom(req), { action: 'user.created', entityType: 'User', entityId: userId, detail: { email: input.email, roles: input.roles } }, tx);
-  if (input.sendEmail) {
-    const t = await tenantById(tenantId);
-    const url = t ? tenantBaseUrl(t) : '';
-    await queueNotification(tenantId, {
-      type: 'AccountCreated',
-      to: { userId, email: input.email },
-      subject: `Your account for ${t?.name ?? 'approvals'}`,
-      bodyHtml: emailBody([
-        `Hello ${input.displayName},`,
-        `An administrator has given you an account for ${t?.name ?? 'the approvals system'}.`,
-        'Sign in with this email address. The first time, you will be emailed a code to confirm it is yours, and then you choose your own 6-digit password key.',
-        { link: `${url}/login`, text: 'Sign in' },
-      ]),
-    }, tx);
-  }
+  if (input.sendEmail) await queueAccountCreatedEmail(tenantId, { userId, email: input.email, displayName: input.displayName }, tx);
   return userId;
 }
 

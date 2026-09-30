@@ -4,7 +4,7 @@ module.exports = {
   subtitle: 'Creating and looking after the customer organisations on an installation',
   audience:
     'This manual is for the people who run an ApprovalFlow installation for more than one organisation: creating customers, giving each one its address and first administrator, suspending and restoring access, and helping a customer administrator when something goes wrong. It assumes the server is already installed - that is covered in docs/DEPLOYMENT-IIS.md. What a customer administrator does inside their own organisation is covered in the Administrator Manual.',
-  version: '1.2',
+  version: '1.3',
   date: 'September 2026',
   blocks: [
     { h1: 'Overview' },
@@ -80,7 +80,7 @@ module.exports = {
     { h2: 'Administrators' },
     { p: 'The **Administrators** section lists the people with the Admin role in that organisation, and whether each has set a password key yet.' },
     { table: { widths: [0.28, 0.72], head: ['Action', 'What happens'], rows: [
-      ['Add administrator', 'Gives the Admin role to somebody who already has an account there. It cannot create an account, so a brand new person must first sign in once, or be added by one of the customer\'s own administrators under **Users > Add people**.'],
+      ['Add an administrator', 'Type their **Email** and choose **Add administrator**. Works for anyone:\n- **Already has an account there:** gets the Admin role, keeping their other roles. No name needed.\n- **Deactivated:** is reactivated and gets the Admin role.\n- **No account yet:** type their **Full name** too. An account is created with the Admin role and no key, and they are emailed **"Your account for <organisation>"** with a Sign in button. At their first sign-in they confirm the address with an emailed code and choose their own key - you never see it. They show as **Not set yet** under Key until then.\nAny email address is accepted, even outside the organisation\'s allowed email domains (for example an outside consultant): that setting only limits people registering themselves. Recorded in the console\'s audit log and in the customer\'s own.'],
       ['Remove', 'Takes the Admin role away. The account itself stays, with its other roles.'],
       ['Reset key', 'Forgets that person password key. At their next sign-in they prove their email address with a code and choose a new key. You never see either key.'],
     ] } },
@@ -146,7 +146,7 @@ module.exports = {
     { table: { widths: [0.38, 0.62], head: ['Task', 'What to do'], rows: [
       ['A new customer is joining', 'Create it (chapter 3), send the address and the first-sign-in key separately, and point their administrator at the Administrator Manual.'],
       ['The first administrator lost the key before using it', 'Open the customer, choose **Reset key** beside them. They set a new key with an emailed code at next sign-in.'],
-      ['Their administrator has left', 'Add the replacement (they must have signed in once), then remove the old one. Never leave an organisation with no administrator.'],
+      ['Their administrator has left', 'Add the replacement under **Add an administrator** (with their name if they have no account yet), then remove the old one. Never leave an organisation with no administrator.'],
       ['They say emails are not arriving', 'Check **Failed emails** on the customer list, then their sender address in Settings. A wrong From address is the usual cause; the mail server itself is installation-wide.'],
       ['They report something you cannot see', 'Ask for the request number, then start a support session with that number as the reason.'],
       ['Non-payment or an incident', 'Suspend the customer. Nothing is deleted, and reactivating restores it exactly.'],

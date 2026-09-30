@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closePool } from '../src/db/pool';
-import { unscopedQuery } from '../src/db/query';
+import { tenantQuery, unscopedQuery } from '../src/db/query';
 import { processArchive } from '../src/archive/worker';
 import { purgeDueTenants } from '../src/platform/purge';
 import { app, bearer, login, makePlatformAdmin, makeTenant, makeUser, recordStepAnswers, unique, platformLogin, PASSWORD } from './helpers';
@@ -156,8 +156,47 @@ describe('creating and managing customers', () => {
     expect((await asGlobal('post', `/tenants/${t.tenantId}/admins`).send({ email: 'person@example.test', remove: true })).status).toBe(200);
     expect((await login(t.slug, 'person@example.test')).body.user.roles).not.toContain('Admin');
 
-    // somebody who is not in that organisation at all
-    expect((await asGlobal('post', `/tenants/${t.tenantId}/admins`).send({ email: 'stranger@example.test' })).status).toBe(404);
+    // removing someone who is not in that organisation at all
+    expect((await asGlobal('post', `/tenants/${t.tenantId}/admins`).send({ email: 'stranger@example.test', remove: true })).status).toBe(404);
+  });
+
+  it('adds anyone as an administrator: a new account, emailed, with no key and outside the allowed domains', async () => {
+    const t = await makeTenant();
+    await asGlobal('patch', `/tenants/${t.tenantId}/settings`).send({ allowedEmailDomains: 'customer.test' });
+
+    // no account yet: the name is needed
+    const noName = await asGlobal('post', `/tenants/${t.tenantId}/admins`).send({ email: 'Consultant@Outside.test' });
+    expect(noName.status).toBe(400);
+    expect(noName.body.error.code).toBe('name_required');
+
+    const added = await asGlobal('post', `/tenants/${t.tenantId}/admins`).send({ email: 'Consultant@Outside.test', displayName: 'Carla Consultant' });
+    expect(added.status).toBe(200);
+    expect(added.body).toMatchObject({ outcome: 'created' });
+    expect(JSON.stringify(added.body)).not.toMatch(/key|password/i);
+
+    const detail = await asGlobal('get', `/tenants/${t.tenantId}`);
+    expect(detail.body.admins).toContainEqual(expect.objectContaining({ email: 'consultant@outside.test', displayName: 'Carla Consultant', isActive: true, hasKey: false }));
+    const [mail] = await tenantQuery<{ Type: string; RecipientEmail: string; BodyHtml: string }>(
+      t.tenantId, `SELECT Type, RecipientEmail, BodyHtml FROM Notifications WHERE TenantId = @TenantId AND Type = 'AccountCreated'`);
+    expect(mail.RecipientEmail).toBe('consultant@outside.test');
+    expect(mail.BodyHtml).toContain('administrator account');
+    // the customer's own audit log shows who did it
+    const [a] = await tenantQuery<{ DetailJson: string }>(t.tenantId, `SELECT DetailJson FROM AuditLog WHERE TenantId = @TenantId AND Action = 'user.created'`);
+    expect(JSON.parse(a.DetailJson)).toMatchObject({ email: 'consultant@outside.test', roles: ['Admin'], changedBy: globalAdmin.email });
+
+    // adding the same address again just keeps them an administrator
+    expect((await asGlobal('post', `/tenants/${t.tenantId}/admins`).send({ email: 'consultant@outside.test' })).body.outcome).toBe('granted');
+  });
+
+  it('reactivates a deactivated person when making them an administrator', async () => {
+    const t = await makeTenant();
+    const userId = await makeUser(t.tenantId, 'leaver@example.test', ['Submitter']);
+    await tenantQuery(t.tenantId, 'UPDATE Users SET IsActive = 0 WHERE TenantId = @TenantId AND UserId = @U', { U: userId });
+    const res = await asGlobal('post', `/tenants/${t.tenantId}/admins`).send({ email: 'leaver@example.test' });
+    expect(res.body).toMatchObject({ outcome: 'reactivated', userId });
+    const asAdmin = await login(t.slug, 'leaver@example.test');
+    expect(asAdmin.status).toBe(200);
+    expect(asAdmin.body.user.roles).toEqual(expect.arrayContaining(['Admin', 'Submitter']));
   });
 
   it('resets a customer administrator key without ever learning it', async () => {

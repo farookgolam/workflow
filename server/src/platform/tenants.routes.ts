@@ -7,12 +7,14 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { audit, systemActor } from '../audit/audit';
 import { settingsPatchBody } from '../admin/settings.routes';
+import { unusablePasswordHash } from '../auth/password';
 import { resetPasswordKey } from '../auth/signup';
 import { signAccessToken } from '../auth/tokens';
 import { config } from '../config';
 import { tenantQuery, unscopedQuery, withTx } from '../db/query';
 import { AppError } from '../http/errors';
 import { settingsForApi, updateSettings } from '../settings/service';
+import { createUser, normalizeEmail, queueAccountCreatedEmail } from '../users/service';
 import { forgetTenant, tenantBaseUrl } from '../tenant';
 import { platformAudit } from './identity';
 import { checkFileRoot } from '../customer-files/files';
@@ -261,35 +263,68 @@ platformTenantsRouter.post('/:tenantId/restore', async (req, res) => {
   res.json({ tenant: shape(await loadOr404(tenantId)) });
 });
 
-/** Give an existing person in this customer the Admin role (or take it away). */
+/**
+ * Make someone an administrator of this customer (or take the role away). Adding works for anyone:
+ *   - an active user gets the Admin role;
+ *   - a deactivated user is reactivated and gets it;
+ *   - an address with no account gets a new one (displayName required), with no key yet, and is emailed how to
+ *     sign in - their first sign-in confirms the address and lets them choose a key, so nobody here learns it.
+ * The customer's "allowed email domains" only limit self-registration, so they do not apply here.
+ */
 platformTenantsRouter.post('/:tenantId/admins', async (req, res) => {
   const tenantId = Number(req.params.tenantId);
-  const body = z.object({ email: z.string().trim().email().max(320), remove: z.boolean().optional() }).parse(req.body);
+  const body = z.object({
+    email: z.string().trim().email().max(320),
+    displayName: z.string().trim().min(2).max(200).optional(),
+    remove: z.boolean().optional(),
+  }).parse(req.body);
   const me = req.platformAdmin!;
   await loadEditableOr404(tenantId);
-
-  const [user] = await tenantQuery<{ UserId: number }>(
-    tenantId,
-    'SELECT UserId FROM Users WHERE TenantId = @TenantId AND Email = @Email AND IsActive = 1',
-    { Email: body.email.toLowerCase() },
-  );
-  if (!user) throw new AppError(404, 'not_found', 'No active user with that address in this organisation');
+  const email = normalizeEmail(body.email);
 
   if (body.remove) {
+    const [user] = await tenantQuery<{ UserId: number }>(
+      tenantId,
+      'SELECT UserId FROM Users WHERE TenantId = @TenantId AND Email = @Email AND IsActive = 1',
+      { Email: email },
+    );
+    if (!user) throw new AppError(404, 'not_found', 'No active user with that address in this organisation');
     await tenantQuery(tenantId, `DELETE FROM UserRoles WHERE TenantId = @TenantId AND UserId = @UserId AND Role = 'Admin'`, { UserId: user.UserId });
-  } else {
+    await platformAudit(req, me.platformAdminId, { action: 'tenant.admin_revoked', entityType: 'User', entityId: user.UserId, tenantId, detail: { email } });
+    await audit(tenantId, systemActor, { action: 'tenant.admin_revoked', entityType: 'User', entityId: user.UserId, detail: { email, changedBy: me.email } });
+    return res.json({ ok: true, outcome: 'revoked' });
+  }
+
+  const result = await withTx(async (tx) => {
+    const [user] = await tenantQuery<{ UserId: number; IsActive: boolean }>(
+      tenantId,
+      'SELECT UserId, IsActive FROM Users WITH (UPDLOCK, HOLDLOCK) WHERE TenantId = @TenantId AND Email = @Email',
+      { Email: email },
+      tx,
+    );
+    if (!user) {
+      if (!body.displayName) {
+        throw new AppError(400, 'name_required', 'This person has no account here yet: enter their full name to create one.');
+      }
+      const userId = await createUser(tenantId, { email, displayName: body.displayName, roles: ['Admin'], passwordHash: await unusablePasswordHash(), passwordSet: false }, tx);
+      await queueAccountCreatedEmail(tenantId, { userId, email, displayName: body.displayName }, tx, { asAdministrator: true });
+      return { userId, outcome: 'created' as const };
+    }
+    if (!user.IsActive) await tenantQuery(tenantId, 'UPDATE Users SET IsActive = 1 WHERE TenantId = @TenantId AND UserId = @UserId', { UserId: user.UserId }, tx);
     await tenantQuery(
       tenantId,
       `IF NOT EXISTS (SELECT 1 FROM UserRoles WHERE TenantId = @TenantId AND UserId = @UserId AND Role = 'Admin')
          INSERT INTO UserRoles (TenantId, UserId, Role) VALUES (@TenantId, @UserId, 'Admin')`,
       { UserId: user.UserId },
+      tx,
     );
-  }
+    return { userId: user.UserId, outcome: user.IsActive ? ('granted' as const) : ('reactivated' as const) };
+  });
 
-  const action = body.remove ? 'tenant.admin_revoked' : 'tenant.admin_granted';
-  await platformAudit(req, me.platformAdminId, { action, entityType: 'User', entityId: user.UserId, tenantId, detail: { email: body.email } });
-  await audit(tenantId, systemActor, { action, entityType: 'User', entityId: user.UserId, detail: { email: body.email, changedBy: me.email } });
-  res.json({ ok: true });
+  const detail = { email, outcome: result.outcome, ...(result.outcome === 'created' ? { displayName: body.displayName } : {}) };
+  await platformAudit(req, me.platformAdminId, { action: 'tenant.admin_granted', entityType: 'User', entityId: result.userId, tenantId, detail });
+  await audit(tenantId, systemActor, { action: result.outcome === 'created' ? 'user.created' : 'tenant.admin_granted', entityType: 'User', entityId: result.userId, detail: { ...detail, roles: ['Admin'], changedBy: me.email } });
+  res.json({ ok: true, outcome: result.outcome, userId: result.userId });
 });
 
 /**

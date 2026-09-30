@@ -1,8 +1,33 @@
 import { tenantQuery, type Tx } from '../db/query';
 import { AppError } from '../http/errors';
 import type { Role } from '../auth/middleware';
+import { emailBody, queueNotification } from '../notifications/outbox';
+import { tenantById, tenantBaseUrl } from '../tenant';
 
 export const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+/**
+ * "Your account for <organisation>": tells someone an account was made for them and how to sign in (their first
+ * sign-in confirms the address with a code and lets them choose a key). `asAdministrator`: a global administrator
+ * made them an administrator of the organisation.
+ */
+export async function queueAccountCreatedEmail(
+  tenantId: number, user: { userId: number; email: string; displayName: string }, tx: Tx, opts: { asAdministrator?: boolean } = {},
+): Promise<void> {
+  const t = await tenantById(tenantId);
+  const org = t?.name ?? 'the approvals system';
+  await queueNotification(tenantId, {
+    type: 'AccountCreated',
+    to: { userId: user.userId, email: user.email },
+    subject: `Your account for ${t?.name ?? 'approvals'}`,
+    bodyHtml: emailBody([
+      `Hello ${user.displayName},`,
+      opts.asAdministrator ? `You have been given an administrator account for ${org}.` : `An administrator has given you an account for ${org}.`,
+      'Sign in with this email address. The first time, you will be emailed a code to confirm it is yours, and then you choose your own 6-digit password key.',
+      { buttons: [{ link: `${t ? tenantBaseUrl(t) : ''}/login`, text: 'Sign in', tone: 'ok' }] },
+    ]),
+  }, tx);
+}
 
 /**
  * Inserts a user. `passwordSet: false` creates an account with no password key yet - the owner

@@ -10,14 +10,19 @@ const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '—
 function Admins({ tenantId, admins, reload }: { tenantId: number; admins: TenantAdmin[]; reload(): void }) {
   const act = useGlobalAction();
   const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
   const [confirmReset, setConfirmReset] = useState<TenantAdmin | null>(null);
 
   const grant = () =>
     act.run(async () => {
-      await gapi(`/tenants/${tenantId}/admins`, { method: 'POST', body: { email: email.trim() } });
+      const res = await gapi<{ outcome: 'created' | 'granted' | 'reactivated' }>(`/tenants/${tenantId}/admins`, { method: 'POST', body: { email: email.trim(), displayName: name.trim() || undefined } });
+      const who = email.trim();
       setEmail('');
+      setName('');
       reload();
-      return 'Administrator added.';
+      return res.outcome === 'created' ? `Account created for ${who} as an administrator. They have been emailed how to sign in and will choose their own key.`
+        : res.outcome === 'reactivated' ? `${who} was deactivated: reactivated and made an administrator.`
+        : `${who} is now an administrator.`;
     });
 
   const revoke = (a: TenantAdmin) =>
@@ -38,8 +43,6 @@ function Admins({ tenantId, admins, reload }: { tenantId: number; admins: Tenant
   return (
     <section className="card stack">
       <h2>Administrators</h2>
-      {act.error && <p className="notice error">{act.error}</p>}
-      {act.ok && <p className="notice">{act.ok}</p>}
       <table className="sample-table">
         <thead><tr><th>Name</th><th>Email</th><th>Key</th><th /></tr></thead>
         <tbody>
@@ -65,11 +68,18 @@ function Admins({ tenantId, admins, reload }: { tenantId: number; admins: Tenant
         </p>
       )}
 
+      <h3 style={{ margin: 0 }}>Add an administrator</h3>
       <div className="field">
-        <label htmlFor="grant">Make an existing person an administrator</label>
+        <label htmlFor="grant">Email</label>
         <input id="grant" type="email" value={email} placeholder="person@customer.example" onChange={(e) => setEmail(e.target.value)} />
-        <p className="hint">They must already have an account in this organisation - people register themselves.</p>
       </div>
+      <div className="field">
+        <label htmlFor="grant-name">Full name</label>
+        <input id="grant-name" value={name} maxLength={200} onChange={(e) => setName(e.target.value)} />
+        <p className="hint">Anyone can be added. Someone who already has an account here just becomes an administrator (the name is not needed). Someone new gets an account - enter their name - and an email telling them how to sign in; they choose their own key. Any email address is accepted, even outside the organisation's allowed domains.</p>
+      </div>
+      {act.error && <p className="notice error" role="alert">{act.error}</p>}
+      {act.ok && <p className="notice" role="status">{act.ok}</p>}
       <div className="actions">
         <button disabled={act.busy || !email.trim()} onClick={() => void grant()}>Add administrator</button>
       </div>
