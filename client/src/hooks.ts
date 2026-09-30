@@ -40,5 +40,5 @@ export function useAction(): { busy: boolean; error: string; ok: string; run: (f
   return { busy, error, ok, run, clear: useCallback(() => (setError(''), setOk('')), []) };
 }
 
-export interface UserRow { userId: number; email: string; displayName: string; isActive: boolean; hasKey: boolean; locked: boolean; createdAt: string; roles: string[]; emailDigest?: boolean }
+export interface UserRow { userId: number; email: string; displayName: string; isActive: boolean; hasKey: boolean; locked: boolean; createdAt: string; roles: string[]; emailDigest?: boolean; digestHour?: number; digestTimeZone?: string | null }
 export interface FormRow { formId: number; name: string; slug: string; description: string | null; isActive: boolean; chainVersion: number | null; steps: number; requests: number }

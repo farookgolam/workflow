@@ -6,7 +6,7 @@ import { FieldGrid, FieldInput, StatusBadge, ValueList, applyLookups, fmtDateTim
 import { NextApproverPicker, choicePayload, needsChoice, type StepHandOff } from '../approvers';
 import { useAuth } from '../auth';
 import { useLoad } from '../hooks';
-import { waitedFor } from '../dates';
+import { myTimeZone, waitedFor } from '../dates';
 import { ChangeList, type SendBack } from '../sendback';
 
 /** Compact "● ● ◐ ○" tracker: one segment per approval step. `back`: the current step sent it back for changes. */
@@ -430,21 +430,22 @@ export function AccountPage() {
 
 /** An email per request as it arrives, or one summary each weekday morning (server/src/workflow/digest.ts). */
 function ApprovalEmailChoice() {
-  const { data, error } = useLoad<{ emailDigest: boolean; digestHour: number }>('/my/preferences');
-  const [value, setValue] = useState<boolean | null>(null);
+  const { data, error } = useLoad<Prefs>('/my/preferences');
+  const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   if (error) return <div className="card"><p className="notice bad">{error}</p></div>;
   if (!data) return null;
-  const digest = value ?? data.emailDigest;
-  const hour = `${data.digestHour % 12 || 12}:00 ${data.digestHour < 12 ? 'AM' : 'PM'}`;
-  const choose = async (on: boolean) => {
+  const p = prefs ?? data;
+  const zone = myTimeZone();
+  const save = async (next: { emailDigest: boolean; digestHour?: number }) => {
     setBusy(true);
     setMsg(null);
     try {
-      await api('/my/preferences', { method: 'PUT', body: { emailDigest: on } });
-      setValue(on);
-      setMsg({ ok: true, text: on ? `Done. From now on you get one summary each weekday at ${hour}, and no email per request.` : 'Done. You will be emailed about each request as it arrives.' });
+      // the hour is the person's own: send the zone of this browser with it
+      const saved = await api<Prefs>('/my/preferences', { method: 'PUT', body: { ...next, timeZone: zone } });
+      setPrefs(saved);
+      setMsg({ ok: true, text: saved.emailDigest ? `Done. You get one summary each weekday at ${hourLabel(saved.digestHour)}, and no email per request.` : 'Done. You will be emailed about each request as it arrives.' });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Something went wrong.' });
     } finally {
@@ -456,14 +457,26 @@ function ApprovalEmailChoice() {
       <h2 style={{ marginTop: 0 }}>Approval emails</h2>
       {msg && <p className={`notice ${msg.ok ? 'ok' : 'bad'}`} role="status">{msg.text}</p>}
       <label className="check" style={{ marginBottom: '.5rem' }}>
-        <input type="radio" name="digest" checked={!digest} disabled={busy} onChange={() => void choose(false)} />
+        <input type="radio" name="digest" checked={!p.emailDigest} disabled={busy} onChange={() => void save({ emailDigest: false })} />
         <span><strong>Email me about each request as it arrives</strong></span>
       </label>
       <label className="check">
-        <input type="radio" name="digest" checked={digest} disabled={busy} onChange={() => void choose(true)} />
-        <span><strong>Send me one summary each morning instead</strong> - Monday to Friday at {hour}, listing everything waiting for you, only when something is</span>
+        <input type="radio" name="digest" checked={p.emailDigest} disabled={busy} onChange={() => void save({ emailDigest: true, digestHour: p.digestHour })} />
+        <span><strong>Send me one summary a day instead</strong> - Monday to Friday, listing everything waiting for you, only when something is</span>
       </label>
+      {p.emailDigest && (
+        <div className="field" style={{ margin: '.75rem 0 0 1.6rem' }}>
+          <label htmlFor="digest-hour">Send it at</label>
+          <select id="digest-hour" value={p.digestHour} disabled={busy} onChange={(e) => void save({ emailDigest: true, digestHour: Number(e.target.value) })} style={{ maxWidth: '10rem' }}>
+            {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{hourLabel(h)}</option>)}
+          </select>
+          <p className="hint">Your time{zone ? ` (${zone.replace(/_/g, ' ')})` : ''}. It arrives within a few minutes after.</p>
+        </div>
+      )}
       <p className="hint">Either way, everything waiting is always on your home page. With the summary you get no separate approval, resubmitted or reminder emails; an administrator's own reminder still reaches you straight away.</p>
     </section>
   );
 }
+
+interface Prefs { emailDigest: boolean; digestHour: number; timeZone: string | null }
+const hourLabel = (h: number) => `${h % 12 || 12}:00 ${h < 12 ? 'AM' : 'PM'}`;

@@ -11,6 +11,7 @@ import { lookupDataForFields } from '../lookups/service';
 import { firstStepHandOff, nextStepHandOff, type StepHandOff } from './approvers';
 import { decideStep, resubmitRequest, submitRequest } from './engine';
 import { checkSignature } from '../forms/sigpad';
+import { knownTimeZone, userClock } from './digest';
 import { emailValue } from './emailDetails';
 import { loadRequestDetail, pendingApprovals, submitterView } from './read';
 
@@ -124,26 +125,42 @@ myRouter.get('/requests/:id', async (req, res) => {
 });
 
 // My own email choice: an email per request as it arrives, or one summary each weekday morning (./digest.ts).
+type Prefs = { EmailDigest: boolean; DigestHour: number | null; DigestTimeZone: string | null };
+const prefsJson = (u: Prefs | undefined) => ({
+  emailDigest: !!u?.EmailDigest,
+  digestHour: u?.DigestHour ?? config.mail.digestHour, // the hour it arrives: their own, or the installation's
+  timeZone: u?.DigestTimeZone ?? null, // null = server time
+});
+const loadPrefs = async (tenantId: number, userId: number) =>
+  (await tenantQuery<Prefs>(tenantId, 'SELECT EmailDigest, DigestHour, DigestTimeZone FROM Users WHERE TenantId = @TenantId AND UserId = @UserId', { UserId: userId }))[0];
+
 myRouter.get('/preferences', async (req, res) => {
-  const [u] = await tenantQuery<{ EmailDigest: boolean }>(req.user!.tenantId, 'SELECT EmailDigest FROM Users WHERE TenantId = @TenantId AND UserId = @UserId', { UserId: req.user!.userId });
-  res.json({ emailDigest: !!u?.EmailDigest, digestHour: config.mail.digestHour });
+  res.json(prefsJson(await loadPrefs(req.user!.tenantId, req.user!.userId)));
 });
 
 myRouter.put('/preferences', async (req, res) => {
-  const { emailDigest } = z.object({ emailDigest: z.boolean() }).parse(req.body);
+  const body = z.object({
+    emailDigest: z.boolean(),
+    digestHour: z.number().int().min(0).max(23).optional(),
+    // the browser's own zone, e.g. America/New_York: the hour is theirs, wherever the server is
+    timeZone: z.string().max(64).refine(knownTimeZone, 'Unknown time zone').optional(),
+  }).parse(req.body);
   const { tenantId, userId } = req.user!;
-  // switched on after this morning's summaries went out: the first one comes tomorrow, not a moment from now
-  const now = new Date();
-  const skipToday = now.getHours() >= config.mail.digestHour
-    ? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}` : null;
+  const before = await loadPrefs(tenantId, userId);
+  const hour = body.digestHour ?? before?.DigestHour ?? null;
+  const zone = body.timeZone ?? before?.DigestTimeZone ?? null;
+  // switched on after today's time has passed: the first summary comes on the next weekday, not a moment from now
+  const c = userClock(new Date(), zone);
+  const skipToday = body.emailDigest && !before?.EmailDigest && c.hour >= (hour ?? config.mail.digestHour) ? c.date : null;
   await tenantQuery(
     tenantId,
-    `UPDATE Users SET EmailDigest = @On, LastDigestOn = CASE WHEN @On = 1 AND EmailDigest = 0 AND @Skip IS NOT NULL THEN @Skip ELSE LastDigestOn END
+    `UPDATE Users SET EmailDigest = @On, DigestHour = @Hour, DigestTimeZone = @Zone,
+            LastDigestOn = CASE WHEN @Skip IS NOT NULL THEN @Skip ELSE LastDigestOn END
       WHERE TenantId = @TenantId AND UserId = @UserId`,
-    { On: emailDigest ? 1 : 0, Skip: skipToday, UserId: userId },
+    { On: body.emailDigest ? 1 : 0, Hour: hour, Zone: zone, Skip: skipToday, UserId: userId },
   );
-  await audit(tenantId, actorFrom(req), { action: 'user.preferences_changed', entityType: 'User', entityId: userId, detail: { emailDigest } });
-  res.json({ emailDigest, digestHour: config.mail.digestHour });
+  await audit(tenantId, actorFrom(req), { action: 'user.preferences_changed', entityType: 'User', entityId: userId, detail: { emailDigest: body.emailDigest, digestHour: hour ?? undefined, timeZone: zone ?? undefined } });
+  res.json(prefsJson(await loadPrefs(tenantId, userId)));
 });
 
 // The form to edit a sent-back request with: its fields as they are now (the same ones resubmit validates

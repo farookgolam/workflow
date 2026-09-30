@@ -57,12 +57,13 @@ module.exports = {
     { p: 'Once you are signed in, choose **Help** in the top-right corner, next to your name, then **User Manual** (this manual) or **How a request works (workflow)** - a two-page sheet: the whole approval process as a diagram, then each step explained with who does it and which emails go out. It opens in a new tab, in your browser\'s own PDF viewer, where you can read, search, save or print it. The manuals can only be opened by people who are signed in; a link to one stops working after a few minutes, so always open it again from **Help** rather than from a saved address.' },
     { h2: 'Changing your password key' },
     { p: 'Click **your name** in the top-right corner, enter your current key and the new one twice, and choose **Change key**. Your other devices are signed out.' },
-    { h2: 'Approval emails: each one, or a morning summary' },
+    { h2: 'Approval emails: each one, or a daily summary' },
     { p: 'Approvers can choose how they are emailed about requests waiting for them. Click **your name** in the top-right corner; under **Approval emails** choose:' },
     { table: { widths: [0.4, 0.6], head: ['Choice', 'What you get'], rows: [
       ['Email me about each request as it arrives', 'The usual: an **Approval needed** email for each request, plus resubmitted and reminder emails. This is where everyone starts.'],
-      ['Send me one summary each morning instead', 'One email, **Monday to Friday at 7:00 AM**, listing everything waiting for you - request, form, requester, step, how long it has waited, and **OVERDUE** where it applies - with a link to each and an **Open my approvals** button. Nothing is sent on a morning when nothing is waiting. You get no separate approval, resubmitted, reassigned or reminder emails.'],
+      ['Send me one summary a day instead', 'One email, **Monday to Friday at the time you choose** (7:00 AM unless you change it), listing everything waiting for you - request, form, requester, step, how long it has waited, and **OVERDUE** where it applies - with a link to each and an **Open my approvals** button. Nothing is sent on a day when nothing is waiting. You get no separate approval, resubmitted, reassigned or reminder emails.'],
     ] } },
+    { p: 'With the summary chosen, **Send it at** lets you pick the hour, from 12:00 AM to 11:00 PM. It is **your own time**: the time zone of the computer you choose it on is shown under the box and saved with it, so the summary comes at your hour wherever the server is. It arrives within a few minutes after that hour.' },
     { p: 'The change takes effect at once. Whichever you choose, everything waiting is always on your home page, and if an administrator presses **Send reminder** for one of your requests, that reminder still reaches you straight away.' },
     { h2: 'Forgotten your password key' },
     { ol: [
@@ -223,7 +224,7 @@ module.exports = {
     { p: 'Your section becomes **read-only** for everyone, including you, and so do your signature and any documents you attached. Opening the same email link again shows your recorded decision. A step can be decided only once: if you open the request in two tabs, or a delegate has already acted, the second attempt shows "This step has already been completed".' },
     { h2: 'Reminders, reassignment and delegates' },
     { ul: [
-      'If the form has reminder rules, you receive **"Reminder: approval needed"** emails after the configured number of days. Each contains a fresh link. (Not if you chose the morning summary: it reminds you every weekday instead.)',
+      'If the form has reminder rules, you receive **"Reminder: approval needed"** emails after the configured number of days. Each contains a fresh link. (Not if you chose the daily summary: it reminds you every weekday instead.)',
       'If a step waits too long, a manager or the administrators may receive an **escalation** notice. Nothing changes for you; the step is still yours.',
       'An administrator can **reassign** your step to someone else (your link then stops working) or add a **delegate** who can act as well as you. Whoever decides first is recorded.',
       'Going on leave? Ask an administrator to add a delegate or reassign your open steps.',

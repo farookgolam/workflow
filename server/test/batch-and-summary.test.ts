@@ -150,4 +150,26 @@ describe('daily summary', () => {
     await submit(form, 'Another');
     expect((await mails('ApprovalRequested', 'dee@bs.test')).length).toBe(1);
   });
+it('comes at the hour each person chose, in their own time zone', async () => {
+    const eve = await makeUser(t.tenantId, 'eve@bs.test', ['Approver'], 'EVE');
+    const eveTok = (await login(t.slug, 'eve@bs.test')).body.accessToken;
+    const put = (body: Record<string, unknown>) => request(app).put(`${api}/my/preferences`).set(bearer(eveTok)).send(body);
+    expect((await put({ emailDigest: true, digestHour: 15, timeZone: 'Not/AZone' })).status).toBe(400);
+    const saved = await put({ emailDigest: true, digestHour: 15, timeZone: 'America/Los_Angeles' });
+    expect(saved.body).toEqual({ emailDigest: true, digestHour: 15, timeZone: 'America/Los_Angeles' });
+    const users = (await request(app).get(`${api}/admin/users`).set(bearer(tok.admin))).body.users;
+    expect(users.find((u: { email: string }) => u.email === 'eve@bs.test')).toMatchObject({ emailDigest: true, digestHour: 15, digestTimeZone: 'America/Los_Angeles' });
+
+    await tenantQuery(t.tenantId, 'UPDATE Users SET LastDigestOn = NULL WHERE TenantId = @TenantId AND UserId = @U', { U: eve });
+    const form = (await request(app).post(`${api}/admin/forms`).set(bearer(tok.admin)).send({ name: 'Cover', slug: 'cover', fields: [{ key: 'title', label: 'Title', type: 'text' }, { key: 'amount', label: 'Amount', type: 'currency' }] })).body.formId;
+    await request(app).put(`${api}/admin/forms/${form}/chain`).set(bearer(tok.admin)).send({ steps: [{ name: 'Cover', approverUserId: eve }] });
+    await submit(form, 'Cover for Tom');
+
+    // Wednesday 7 October 2026: 22:30 UTC is 15:30 in Los Angeles (PDT, UTC-7); 21:30 UTC is 14:30 there
+    expect(await runDailySummaries({ now: new Date(Date.UTC(2026, 9, 7, 21, 30)), tenantId: t.tenantId })).toBe(0);
+    expect(await runDailySummaries({ now: new Date(Date.UTC(2026, 9, 7, 22, 30)), tenantId: t.tenantId })).toBe(1);
+    expect((await mails('DailySummary', 'eve@bs.test')).length).toBe(1);
+    // Friday 23:30 in Los Angeles is already Saturday in UTC - still Friday for her, so it is sent
+    expect(await runDailySummaries({ now: new Date(Date.UTC(2026, 9, 10, 6, 30)), tenantId: t.tenantId })).toBe(1);
+  });
 });

@@ -1,15 +1,31 @@
-// The daily summary: one email each weekday morning for approvers who chose it (Users.EmailDigest) instead of an
-// email per request. It lists everything waiting for them; nothing is sent when nothing is waiting. Run by the
-// sweeper every few minutes: from DIGEST_HOUR (server time) on a weekday, each such person is handled once that day -
-// Users.LastDigestOn is claimed first, so overlapping runs never send two.
+// The daily summary: one email each weekday for approvers who chose it (Users.EmailDigest) instead of an email per
+// request. It lists everything waiting for them; nothing is sent when nothing is waiting. Run by the sweeper every few
+// minutes: from each person's chosen hour (Users.DigestHour, else DIGEST_HOUR) on a weekday, in their own time zone
+// (Users.DigestTimeZone, else server time), each is handled once that day - Users.LastDigestOn, that zone's date, is
+// claimed first, so overlapping runs never send two.
 import { config } from '../config';
 import { tenantQuery, unscopedQuery, withTx } from '../db/query';
 import { emailBody, queueNotification } from '../notifications/outbox';
 import { tenantBaseUrlById } from '../tenant';
 import { pendingApprovals } from './read';
 
-/** The server-local calendar date, as 2026-09-30. */
-const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const two = (n: number) => String(n).padStart(2, '0');
+const WEEKDAY: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+/** Weekday (0 = Sunday), hour and calendar date (2026-09-30) of `now` in a time zone - server time when none or unknown. */
+export function userClock(now: Date, timeZone: string | null): { day: number; hour: number; date: string } {
+  if (timeZone) {
+    try {
+      const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' })
+        .formatToParts(now).map((x) => [x.type, x.value]));
+      return { day: WEEKDAY[p.weekday], hour: Number(p.hour), date: `${p.year}-${p.month}-${p.day}` };
+    } catch { /* not a zone this server knows: server time */ }
+  }
+  return { day: now.getDay(), hour: now.getHours(), date: `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}` };
+}
+
+/** Whether a zone name is one this server can work with. */
+export const knownTimeZone = (tz: string): boolean => { try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch { return false; } };
 
 const waited = (from: Date, now: Date) => {
   const hours = Math.floor((now.getTime() - from.getTime()) / 3_600_000);
@@ -21,19 +37,18 @@ const waited = (from: Date, now: Date) => {
 /** Sends the summaries that are due. `now` is for tests. Returns how many were queued. */
 export async function runDailySummaries(opts: { now?: Date; tenantId?: number } = {}): Promise<number> {
   const now = opts.now ?? new Date();
-  if (now.getDay() === 0 || now.getDay() === 6 || now.getHours() < config.mail.digestHour) return 0;
-  const today = localDay(now);
-  const due = await unscopedQuery<{ TenantId: number; UserId: number }>(
-    `SELECT u.TenantId, u.UserId
+  const people = await unscopedQuery<{ TenantId: number; UserId: number; DigestHour: number | null; DigestTimeZone: string | null }>(
+    `SELECT u.TenantId, u.UserId, u.DigestHour, u.DigestTimeZone
        FROM Users u JOIN Tenants t ON t.TenantId = u.TenantId AND t.IsActive = 1 AND t.RemovedAt IS NULL
-      WHERE u.EmailDigest = 1 AND u.IsActive = 1 AND (u.LastDigestOn IS NULL OR u.LastDigestOn < @Today)
-        AND (@Tenant IS NULL OR u.TenantId = @Tenant)`,
-    { Today: today, Tenant: opts.tenantId ?? null },
+      WHERE u.EmailDigest = 1 AND u.IsActive = 1 AND (@Tenant IS NULL OR u.TenantId = @Tenant)`,
+    { Tenant: opts.tenantId ?? null },
   );
   let sent = 0;
-  for (const u of due) {
+  for (const u of people) {
+    const c = userClock(now, u.DigestTimeZone);
+    if (c.day === 0 || c.day === 6 || c.hour < (u.DigestHour ?? config.mail.digestHour)) continue;
     try {
-      if (await summaryFor(u.TenantId, u.UserId, today, now)) sent++;
+      if (await summaryFor(u.TenantId, u.UserId, c.date, now)) sent++;
     } catch (err) {
       if (!config.isTest) console.warn(`[summary] skipped user ${u.UserId}: ${(err as Error).message}`);
     }
@@ -74,7 +89,7 @@ async function summaryFor(tenantId: number, userId: number, today: string, now: 
             })),
           },
           { buttons: [{ link: `${base}/`, text: 'Open my approvals', tone: 'ok' }] },
-          'You get this summary because you chose one email each morning instead of one per request. You can change that under your name, at the top right of the app.',
+          'You get this summary because you chose one email a day instead of one per request. You can change that, or its time, under your name at the top right of the app.',
         ]),
       },
       tx,

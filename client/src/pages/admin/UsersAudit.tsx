@@ -148,7 +148,9 @@ export function AdminUsers() {
                     onChange={() => void patch(u, { roles: toggle(u.roles, role) }, 'Roles updated.')} /><span>{role}</span></label>))}
                 </td>
                 <td>{!u.isActive ? 'Inactive' : !u.hasKey ? <span className="badge badge-active">No key yet</span> : u.locked ? <span className="badge badge-rejected">Locked</span> : 'Active'}</td>
-                <td className="small">{u.emailDigest ? 'Daily summary' : 'Each request'}</td>
+                <td className="small" title={u.emailDigest && u.digestTimeZone ? `Their time: ${u.digestTimeZone}` : undefined}>
+                  {u.emailDigest ? `Daily summary (${(u.digestHour ?? 7) % 12 || 12}:00 ${(u.digestHour ?? 7) < 12 ? 'AM' : 'PM'})` : 'Each request'}
+                </td>
                 <td style={{ whiteSpace: 'nowrap' }}>{new Date(u.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}</td>
                 <td className="row-actions">
                   {u.userId !== me!.userId && <button className="link" disabled={act.busy} onClick={() => void patch(u, { isActive: !u.isActive }, u.isActive ? 'User deactivated.' : 'User reactivated.')}>{u.isActive ? 'Deactivate' : 'Reactivate'}</button>}

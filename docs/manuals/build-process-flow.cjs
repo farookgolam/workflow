@@ -181,7 +181,7 @@ const steps = [
     'Gives the request its number (for example REQ-000123) and the status In progress, saves exactly what was submitted, and makes step 1 active. The requester sees the request page with its progress tracker.',
     'Requester: "We received your request"'],
   [3, 'Approver emailed', 'System',
-    'Emails the step\'s approver (and any delegate) a personal link that works only for their account and expires after 14 days. The email lists the request details (up to 12 fields, unless the organisation turned this off) and has Approve, Send back and Reject buttons. Reminders and escalation follow the step\'s rules while it waits. Approvers on the morning summary get one email a day instead.',
+    'Emails the step\'s approver (and any delegate) a personal link that works only for their account and expires after 14 days. The email lists the request details (up to 12 fields, unless the organisation turned this off) and has Approve, Send back and Reject buttons. Reminders and escalation follow the step\'s rules while it waits. Approvers on the daily summary get one email a day instead.',
     'Approver: "Approval needed"; later "Reminder" if set up (or the daily summary instead)'],
   [4, 'Review the request', 'Approver',
     'Signs in (from the email or the home page list "Waiting for my approval"). Sees the full submission, every earlier step\'s decision, comments, signature and documents, and any earlier send-backs. Never sees later steps. Nothing can be edited.',

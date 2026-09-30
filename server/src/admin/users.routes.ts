@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 import express, { Router, type Request } from 'express';
 import { z } from 'zod';
+import { config } from '../config';
 import { actorFrom, audit } from '../audit/audit';
 import type { Role } from '../auth/middleware';
 import { unusablePasswordHash } from '../auth/password';
@@ -149,7 +150,7 @@ adminUsersRouter.get('/', async (req, res) => {
   const rows = await tenantQuery<{ UserId: number; Email: string; DisplayName: string; IsActive: boolean; Roles: string | null }>(
     req.user!.tenantId,
     `SELECT u.UserId, u.Email, u.DisplayName, u.IsActive, CASE WHEN u.PasswordSetAt IS NULL THEN 0 ELSE 1 END AS HasKey,
-            CASE WHEN u.LockedUntil > SYSUTCDATETIME() THEN 1 ELSE 0 END AS Locked, u.CreatedAt, u.EmailDigest,
+            CASE WHEN u.LockedUntil > SYSUTCDATETIME() THEN 1 ELSE 0 END AS Locked, u.CreatedAt, u.EmailDigest, u.DigestHour, u.DigestTimeZone,
             (SELECT STRING_AGG(r.Role, ',') FROM UserRoles r WHERE r.TenantId = u.TenantId AND r.UserId = u.UserId) AS Roles
        FROM Users u WHERE u.TenantId = @TenantId ORDER BY u.DisplayName`,
   );
@@ -165,6 +166,8 @@ adminUsersRouter.get('/', async (req, res) => {
       roles: r.Roles ? r.Roles.split(',') : [],
       // the person's own choice (My account): one summary each morning instead of an email per request
       emailDigest: !!(r as unknown as { EmailDigest: boolean }).EmailDigest,
+      digestHour: (r as unknown as { DigestHour: number | null }).DigestHour ?? config.mail.digestHour,
+      digestTimeZone: (r as unknown as { DigestTimeZone: string | null }).DigestTimeZone,
     })),
   });
 });
