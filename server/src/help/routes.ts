@@ -2,8 +2,8 @@
 // which a new browser tab showing a PDF cannot do. So opening a manual takes two steps:
 //   1. POST /help/link (signed in; /global/help/link for global administrators) -> a link to the one manual this person may read, valid for a few minutes
 //   2. GET  /help/manuals/<file>?t=... -> the PDF, shown in the browser's own viewer
-// Administrators may read the Administrator Manual, everyone the User Manual, global administrators the Global
-// Administrator Manual. The link names its file, so it cannot be reused for another manual.
+// Administrators may read the Administrator Manual, everyone the User Manual and the workflow sheet, global
+// administrators the Global Administrator Manual. The link names its file, so it cannot be reused for another manual.
 import fs from 'node:fs';
 import path from 'node:path';
 import { Router } from 'express';
@@ -18,6 +18,8 @@ export const MANUALS = {
   user: 'ApprovalFlow-User-Manual.pdf',
   admin: 'ApprovalFlow-Administrator-Manual.pdf',
   global: 'ApprovalFlow-Global-Administrator-Manual.pdf',
+  // the request workflow on two pages: diagram and step by step (docs/manuals/build-process-flow.cjs)
+  workflow: 'ApprovalFlow-Process-Flow.pdf',
 } as const;
 type Manual = keyof typeof MANUALS;
 
@@ -31,9 +33,9 @@ function link(manual: Manual): { url: string } {
 
 export const helpRouter = Router();
 
-/** A customer's user: the User Manual, or - for administrators - the Administrator Manual. */
+/** A customer's user: the User Manual and the workflow sheet, and - for administrators - the Administrator Manual. */
 helpRouter.post('/link', requireAuth, (req, res) => {
-  const { manual } = z.object({ manual: z.enum(['user', 'admin']) }).parse(req.body);
+  const { manual } = z.object({ manual: z.enum(['user', 'admin', 'workflow']) }).parse(req.body);
   if (manual === 'admin' && !req.user!.roles.includes('Admin')) throw new AppError(403, 'forbidden', 'The Administrator Manual is for administrators');
   res.json(link(manual));
 });

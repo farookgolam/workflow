@@ -157,4 +157,5 @@ function render(manual, outFile, tocPageNumbers) {
     const final = await render(manual, out, first.headings); // pass 2 prints them in the contents
     console.log(`${manual.file}: ${final.pages} pages`);
   }
+  if (!names.length) require('./build-process-flow.cjs'); // the workflow sheet, also under Help
 })();

@@ -61,21 +61,20 @@ function Shell() {
   );
 }
 
-/** Opens a manual in a new tab: the User Manual for everyone, and the Administrator Manual too for administrators. */
+/** Opens a PDF in a new tab: the User Manual and the workflow sheet for everyone, and the Administrator Manual too for administrators. */
 function HelpLink({ admin }: { admin: boolean }) {
-  const open = (manual: 'user' | 'admin') => (e: MouseEvent<HTMLAnchorElement>) => {
+  const open = (manual: 'user' | 'admin' | 'workflow') => (e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
     (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
     void openManual(() => apiClient<{ url: string }>('/help/link', { method: 'POST', body: { manual } }));
   };
-  const user = <a href="#help" onClick={open('user')}>{admin ? 'User Manual' : 'Help'}</a>;
-  if (!admin) return <span className="help-link">{user}</span>;
   return (
     <details className="help-menu">
       <summary>Help</summary>
       <div className="help-pop">
-        <a href="#help" onClick={open('admin')}>Administrator Manual</a>
-        {user}
+        {admin && <a href="#help" onClick={open('admin')}>Administrator Manual</a>}
+        <a href="#help" onClick={open('user')}>User Manual</a>
+        <a href="#help" onClick={open('workflow')}>How a request works (workflow)</a>
       </div>
     </details>
   );

@@ -54,7 +54,7 @@ module.exports = {
       ['Moon (Dark)', 'Always dark: black backgrounds with light text and yellow highlights - easier on the eyes in a dim room.'],
     ] } },
     { p: 'Your choice is remembered on that computer or phone, in that browser, and is not part of your account: set it again on another device if you like. It changes nothing but the colours.' },
-    { p: 'Once you are signed in, choose **Help** in the top-right corner, next to your name. This manual opens in a new tab, in your browser\'s own PDF viewer, where you can read, search, save or print it. The manuals can only be opened by people who are signed in; a link to one stops working after a few minutes, so always open it again from **Help** rather than from a saved address.' },
+    { p: 'Once you are signed in, choose **Help** in the top-right corner, next to your name, then **User Manual** (this manual) or **How a request works (workflow)** - a two-page sheet: the whole approval process as a diagram, then each step explained with who does it and which emails go out. It opens in a new tab, in your browser\'s own PDF viewer, where you can read, search, save or print it. The manuals can only be opened by people who are signed in; a link to one stops working after a few minutes, so always open it again from **Help** rather than from a saved address.' },
     { h2: 'Changing your password key' },
     { p: 'Click **your name** in the top-right corner, enter your current key and the new one twice, and choose **Change key**. Your other devices are signed out.' },
     { h2: 'Forgotten your password key' },

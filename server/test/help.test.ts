@@ -37,6 +37,11 @@ describe('manuals are for signed-in people only', () => {
     expect(pdf.headers['content-security-policy']).not.toMatch(/object-src/);
     expect(pdf.headers['cache-control']).toBe('no-store');
 
+    // the workflow sheet is for everyone
+    const flow = await request(app).get((await linkFor('sam', 'workflow')).body.url).buffer(true);
+    expect(flow.status).toBe(200);
+    expect(flow.headers['content-type']).toBe('application/pdf');
+
     expect((await linkFor('sam', 'admin')).status).toBe(403);
     expect((await request(app).get((await linkFor('admin', 'admin')).body.url)).status).toBe(200);
     expect((await request(app).post(`${api}/global/help/link`).set(bearer(tok.admin))).status).toBe(401); // not a global administrator

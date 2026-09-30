@@ -24,7 +24,7 @@ module.exports = {
     ] } },
     { note: 'These are the addresses of the **local trial installation**, which can only be opened on the server itself. In a real installation the first part is your own organisation address, for example https://acme.approvals.yourprovider.com or a name of your own such as https://approvals.acme.com; the parts after it - /login, /admin and so on - stay the same. Links in emails always use your organisation address, so an approver who clicks one always lands in the right place.' },
     { h2: 'Help: the manuals in the app' },
-    { p: 'Choose **Help** in the top-right corner, next to your name. Administrators get a small menu with two choices: **Administrator Manual** (this one) and **User Manual** (the one your submitters and approvers see, useful when you explain something to them). Everyone else gets **Help**, which opens the User Manual.' },
+    { p: 'Choose **Help** in the top-right corner, next to your name. A small menu opens: **Administrator Manual** (this one), **User Manual** (the one your submitters and approvers see, useful when you explain something to them) and **How a request works (workflow)** - a two-page sheet with the approval process as a diagram and each step explained, handy for training or to send to a new colleague. Everyone else gets the same menu without the Administrator Manual.' },
     { ul: [
       'The manual opens in a new tab, in the browser\'s own PDF viewer, where it can be searched, saved or printed.',
       'Only signed-in people can open the manuals, and only administrators the Administrator Manual. The address of an open manual works for a few minutes only - a copied or bookmarked link stops working, so open it again from **Help**.',
