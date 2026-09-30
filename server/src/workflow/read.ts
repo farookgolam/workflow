@@ -1,4 +1,4 @@
-import { tenantQuery } from '../db/query';
+import { tenantQuery, type Tx } from '../db/query';
 
 export interface FieldValue {
   key: string;
@@ -258,4 +258,54 @@ export function submitterView(d: RequestDetail) {
       ...(d.submittersSeeComments ? { comments: s.comments, responses: s.responses } : {}),
     })),
   };
+}
+
+export interface PendingApproval {
+  requestStepId: number;
+  requestId: number;
+  requestNumber: string;
+  formName: string;
+  submitterName: string;
+  stepOrder: number;
+  totalSteps: number;
+  stepName: string;
+  activatedAt: Date;
+  dueAt: Date | null;
+  overdue: boolean;
+  /** Approving means choosing who approves the next step - one at a time only, never in a batch. */
+  choosesNext: boolean;
+}
+
+/** Steps waiting for this person's decision (as approver or delegate), oldest first. */
+export async function pendingApprovals(tenantId: number, userId: number, tx?: Tx): Promise<PendingApproval[]> {
+  const rows = await tenantQuery<Record<string, any>>(
+    tenantId,
+    `SELECT rs.RequestStepId, r.RequestId, rs.StepOrder, rs.StepName, rs.ActivatedAt, rs.DueAt, r.RequestNumber, r.TotalSteps, f.Name AS FormName,
+            su.DisplayName AS SubmitterName, CAST(ISNULL(ns.ApproverChosen, 0) AS BIT) AS ChoosesNext
+       FROM RequestSteps rs
+       JOIN Requests r ON r.TenantId = rs.TenantId AND r.RequestId = rs.RequestId AND r.Status = 'InProgress'
+       JOIN Forms f ON f.TenantId = r.TenantId AND f.FormId = r.FormId
+       JOIN Users su ON su.TenantId = r.TenantId AND su.UserId = r.SubmitterUserId
+       LEFT JOIN RequestSteps nx ON nx.TenantId = rs.TenantId AND nx.RequestId = rs.RequestId AND nx.StepOrder = rs.StepOrder + 1
+       LEFT JOIN ApprovalSteps ns ON ns.TenantId = nx.TenantId AND ns.StepId = nx.StepId
+      WHERE rs.TenantId = @TenantId AND rs.Status = 'Active' AND (rs.AssignedUserId = @UserId OR rs.DelegateUserId = @UserId)
+      ORDER BY rs.ActivatedAt`,
+    { UserId: userId },
+    tx,
+  );
+  const now = new Date();
+  return rows.map((r) => ({
+    requestStepId: r.RequestStepId,
+    requestId: r.RequestId,
+    requestNumber: r.RequestNumber,
+    formName: r.FormName,
+    submitterName: r.SubmitterName,
+    stepOrder: r.StepOrder,
+    totalSteps: r.TotalSteps,
+    stepName: r.StepName,
+    activatedAt: r.ActivatedAt,
+    dueAt: r.DueAt,
+    overdue: r.DueAt !== null && r.DueAt < now,
+    choosesNext: r.ChoosesNext === true || r.ChoosesNext === 1,
+  }));
 }

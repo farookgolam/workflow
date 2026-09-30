@@ -102,6 +102,10 @@ button.danger-outline:hover:not(:disabled) { background: var(--bad-soft); border
 button.link, button.link:hover:not(:disabled) { border: 0; background: none; color: var(--link); padding: 0; text-decoration: underline; text-underline-offset: 2px; font-weight: 500; }
 .actions { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin-top: .5rem; }
 .reject-box { border: 1px solid var(--bad); background: var(--bad-soft); border-radius: var(--radius); padding: 1rem 1.1rem; }
+.batch-box { border: 1px solid var(--border-strong); border-left: 3px solid var(--yellow); border-radius: var(--radius); padding: 1rem 1.1rem; background: var(--surface); }
+.batch-list { list-style: none; margin: 0 0 1rem; padding: 0; }
+.batch-list li { padding: .5rem 0; border-top: 1px solid var(--border); }
+.batch-list li:first-child { border-top: 0; }
 .return-box { border: 1px solid var(--back); border-left-width: 3px; background: var(--surface); border-radius: var(--radius); padding: 1rem 1.1rem; }
 
 .notice { padding: .7rem .9rem; border-radius: 5px; background: var(--notice-bg); border: 0; border-left: 3px solid var(--yellow); color: var(--text); }

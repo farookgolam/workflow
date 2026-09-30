@@ -3,13 +3,16 @@ import { z } from 'zod';
 import { actorFrom, audit } from '../audit/audit';
 import { requireRole } from '../auth/middleware';
 import { hashOpaqueToken } from '../auth/tokens';
+import { config } from '../config';
 import { tenantQuery } from '../db/query';
 import { getFormFields, listActiveForms } from '../forms/service';
 import { AppError } from '../http/errors';
 import { lookupDataForFields } from '../lookups/service';
 import { firstStepHandOff, nextStepHandOff } from './approvers';
 import { decideStep, resubmitRequest, submitRequest } from './engine';
-import { loadRequestDetail, submitterView } from './read';
+import { checkSignature } from '../forms/sigpad';
+import { emailValue } from './emailDetails';
+import { loadRequestDetail, pendingApprovals, submitterView } from './read';
 
 export const idParam = (raw: unknown): number => {
   const id = z.coerce.number().int().positive().max(2147483647).safeParse(raw);
@@ -120,6 +123,29 @@ myRouter.get('/requests/:id', async (req, res) => {
   res.json({ request: submitterView(detail) });
 });
 
+// My own email choice: an email per request as it arrives, or one summary each weekday morning (./digest.ts).
+myRouter.get('/preferences', async (req, res) => {
+  const [u] = await tenantQuery<{ EmailDigest: boolean }>(req.user!.tenantId, 'SELECT EmailDigest FROM Users WHERE TenantId = @TenantId AND UserId = @UserId', { UserId: req.user!.userId });
+  res.json({ emailDigest: !!u?.EmailDigest, digestHour: config.mail.digestHour });
+});
+
+myRouter.put('/preferences', async (req, res) => {
+  const { emailDigest } = z.object({ emailDigest: z.boolean() }).parse(req.body);
+  const { tenantId, userId } = req.user!;
+  // switched on after this morning's summaries went out: the first one comes tomorrow, not a moment from now
+  const now = new Date();
+  const skipToday = now.getHours() >= config.mail.digestHour
+    ? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}` : null;
+  await tenantQuery(
+    tenantId,
+    `UPDATE Users SET EmailDigest = @On, LastDigestOn = CASE WHEN @On = 1 AND EmailDigest = 0 AND @Skip IS NOT NULL THEN @Skip ELSE LastDigestOn END
+      WHERE TenantId = @TenantId AND UserId = @UserId`,
+    { On: emailDigest ? 1 : 0, Skip: skipToday, UserId: userId },
+  );
+  await audit(tenantId, actorFrom(req), { action: 'user.preferences_changed', entityType: 'User', entityId: userId, detail: { emailDigest } });
+  res.json({ emailDigest, digestHour: config.mail.digestHour });
+});
+
 // The form to edit a sent-back request with: its fields as they are now (the same ones resubmit validates
 // against), even if the form has since been switched off for new requests.
 myRouter.get('/requests/:id/form', async (req, res) => {
@@ -173,31 +199,62 @@ approvalsRouter.get('/resolve', async (req, res) => {
 });
 
 approvalsRouter.get('/pending', async (req, res) => {
-  const rows = await tenantQuery<Record<string, any>>(
-    req.user!.tenantId,
-    `SELECT rs.RequestStepId, rs.StepOrder, rs.StepName, rs.ActivatedAt, rs.DueAt, r.RequestNumber, r.TotalSteps, f.Name AS FormName, su.DisplayName AS SubmitterName
-       FROM RequestSteps rs
-       JOIN Requests r ON r.TenantId = rs.TenantId AND r.RequestId = rs.RequestId AND r.Status = 'InProgress'
-       JOIN Forms f ON f.TenantId = r.TenantId AND f.FormId = r.FormId
-       JOIN Users su ON su.TenantId = r.TenantId AND su.UserId = r.SubmitterUserId
-      WHERE rs.TenantId = @TenantId AND rs.Status = 'Active' AND (rs.AssignedUserId = @UserId OR rs.DelegateUserId = @UserId)
-      ORDER BY rs.ActivatedAt`,
-    { UserId: req.user!.userId },
-  );
+  const { tenantId, userId } = req.user!;
+  const approvals = await pendingApprovals(tenantId, userId);
+  // a few of each request's submitted values, so a batch can be checked before it is approved
+  const data = approvals.length
+    ? await tenantQuery<{ RequestId: number; FieldLabel: string; FieldType: string; Value: string | null }>(
+        tenantId,
+        `SELECT RequestId, FieldLabel, FieldType, Value FROM RequestData
+          WHERE TenantId = @TenantId AND RequestId IN (SELECT value FROM OPENJSON(@Ids)) ORDER BY RequestId, SortOrder`,
+        { Ids: JSON.stringify(approvals.map((a) => a.requestId)) },
+      )
+    : [];
   res.json({
-    approvals: rows.map((r) => ({
-      requestStepId: r.RequestStepId,
-      requestNumber: r.RequestNumber,
-      formName: r.FormName,
-      submitterName: r.SubmitterName,
-      stepOrder: r.StepOrder,
-      totalSteps: r.TotalSteps,
-      stepName: r.StepName,
-      activatedAt: r.ActivatedAt,
-      dueAt: r.DueAt,
-      overdue: r.DueAt !== null && r.DueAt < new Date(),
+    approvals: approvals.map((a) => ({
+      ...a,
+      preview: data
+        .filter((d) => d.RequestId === a.requestId)
+        .map((d) => ({ label: d.FieldLabel, value: emailValue(d.FieldType, d.Value) }))
+        .filter((d): d is { label: string; value: string } => d.value !== null)
+        .slice(0, PREVIEW_FIELDS),
     })),
   });
+});
+
+const PREVIEW_FIELDS = 4;
+const MAX_BATCH = 50;
+
+/**
+ * Approve several waiting requests at once with one signature (and optional comment for all). Each is decided on
+ * its own, exactly like a single approval - its own transaction, emails and next step - so one that cannot be
+ * approved (decided meanwhile, needs the next approver chosen, ...) is reported and the rest go ahead.
+ */
+approvalsRouter.post('/batch-approve', async (req, res) => {
+  const body = z.object({
+    requestStepIds: z.array(z.number().int().positive().max(2147483647)).min(1).max(MAX_BATCH),
+    comments: z.string().max(4000).optional(),
+    signature: z.unknown(),
+  }).parse(req.body);
+  const sig = body.signature === undefined ? { value: null } : checkSignature(body.signature);
+  if ('error' in sig || !sig.value) {
+    throw new AppError(400, 'validation_failed', 'Invalid input', [{ path: 'signature', message: 'error' in sig ? `Signature ${sig.error}` : 'Sign to approve' }]);
+  }
+
+  const u = req.user!;
+  const results: { requestStepId: number; ok: boolean; requestStatus?: string; nextStepOrder?: number | null; message?: string }[] = [];
+  for (const requestStepId of [...new Set(body.requestStepIds)]) {
+    try {
+      const r = await decideStep(u.tenantId, actorFrom(req), { userId: u.userId, displayName: u.displayName }, requestStepId,
+        { decision: 'approve', signature: body.signature, comments: body.comments, batch: true });
+      results.push({ requestStepId, ok: true, ...r });
+    } catch (err) {
+      if (!(err instanceof AppError)) throw err;
+      const choose = err.code === 'validation_failed' && Array.isArray(err.details) && (err.details as { path: string }[]).some((d) => d.path.startsWith('next'));
+      results.push({ requestStepId, ok: false, message: choose ? 'The next approver has to be chosen: open it to approve' : err.message });
+    }
+  }
+  res.json({ approved: results.filter((r) => r.ok).length, results });
 });
 
 /** The approver page: (a) the submission, (b) earlier approvers' completed sections, (c) this approver's own section. */

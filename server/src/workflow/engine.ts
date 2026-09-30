@@ -116,7 +116,8 @@ async function activateStep(
         ...(resubmitted.note ? [{ label: 'Their note', value: resubmitted.note }] : []),
       ]
     : [`A request is waiting for your decision at step "${step.StepName}".`];
-  await queueNotification(
+  const summaryOnly = await onDailySummary(tenantId, step.AssignedUserId, tx);
+  if (!summaryOnly) await queueNotification(
     tenantId,
     {
       type: resubmitted ? 'Resubmitted' : 'ApprovalRequested',
@@ -145,10 +146,16 @@ async function activateStep(
       requestId: ctx.requestId,
       fromState: from,
       toState: 'Active',
-      detail: { stepOrder, assignedUserId: step.AssignedUserId, selfApproval: step.AssignedUserId === ctx.submitter.userId || undefined },
+      detail: { stepOrder, assignedUserId: step.AssignedUserId, selfApproval: step.AssignedUserId === ctx.submitter.userId || undefined, dailySummary: summaryOnly || undefined },
     },
     tx,
   );
+}
+
+/** The person chose one summary each morning (Users.EmailDigest): no per-request "please decide" emails for them - see ./digest.ts. */
+async function onDailySummary(tenantId: number, userId: number, tx: Tx): Promise<boolean> {
+  const [u] = await tenantQuery<{ EmailDigest: boolean }>(tenantId, 'SELECT EmailDigest FROM Users WHERE TenantId = @TenantId AND UserId = @UserId', { UserId: userId }, tx);
+  return !!u?.EmailDigest;
 }
 
 /** Issues a fresh link token bound to `userId`, superseding that user's earlier link for the step. Returns the emailed link. */
@@ -284,6 +291,8 @@ export interface DecisionInput {
   rejectionReason?: string;
   /** On return (required): what the submitter should change. */
   returnReason?: string;
+  /** Approved together with others from the approver's list (one signature for all); recorded in the audit detail. */
+  batch?: boolean;
   /** On approve (required): the approver's drawn signature, pen strokes as from the signature pad. */
   signature?: unknown;
   /** The emailed link token, when the approver arrived through it. Verified if present. */
@@ -418,6 +427,7 @@ export async function decideStep(
           asDelegate: user.userId !== row.AssignedUserId || undefined,
           viaLink: input.token !== undefined,
           selfApproval: user.userId === row.SubmitterUserId || undefined,
+          inBatch: input.batch || undefined,
         },
       },
       tx,
@@ -811,10 +821,15 @@ async function approverById(tenantId: number, userId: number, tx: Tx) {
   return u;
 }
 
+/**
+ * Emails one person a fresh link to decide. Returns false, sending nothing, when they chose the daily summary - unless
+ * `always` (an administrator pressed Send reminder, which is meant to reach them now).
+ */
 async function sendStepLink(
   tenantId: number, row: ActiveStepRow, requestStepId: number, to: { UserId: number; Email: string; DisplayName: string },
-  type: 'ApprovalRequested' | 'Reminder' | 'Reassigned', intro: string, tx: Tx,
-): Promise<void> {
+  type: 'ApprovalRequested' | 'Reminder' | 'Reassigned', intro: string, tx: Tx, always = false,
+): Promise<boolean> {
+  if (!always && (await onDailySummary(tenantId, to.UserId, tx))) return false;
   const link = await issueApprovalLink(tenantId, row.TenantSlug, requestStepId, to.UserId, tx);
   await queueNotification(
     tenantId,
@@ -836,6 +851,7 @@ async function sendStepLink(
     },
     tx,
   );
+  return true;
 }
 
 /**
@@ -889,7 +905,11 @@ export async function remindStep(tenantId: number, actor: Actor, requestStepId: 
       { A: row.AssignedUserId, D: row.DelegateUserId ?? row.AssignedUserId },
       tx,
     );
-    for (const to of recipients) await sendStepLink(tenantId, row, requestStepId, to, 'Reminder', 'This request is still waiting for your decision.', tx);
+    // a scheduled reminder is left to the daily summary for people who chose it; an administrator's reminder always goes
+    const summaryOnly: number[] = [];
+    for (const to of recipients) {
+      if (!(await sendStepLink(tenantId, row, requestStepId, to, 'Reminder', 'This request is still waiting for your decision.', tx, reason === 'manual'))) summaryOnly.push(to.UserId);
+    }
     await tenantQuery(
       tenantId,
       `UPDATE RequestSteps SET LastReminderAt = SYSUTCDATETIME(), ReminderCount = ReminderCount + 1
@@ -897,6 +917,6 @@ export async function remindStep(tenantId: number, actor: Actor, requestStepId: 
       { S: requestStepId },
       tx,
     );
-    await audit(tenantId, actor, { action: 'step.reminder_sent', entityType: 'RequestStep', entityId: requestStepId, requestId: row.RequestId, detail: { stepOrder: row.StepOrder, reason, recipients: recipients.map((r) => r.UserId) } }, tx);
+    await audit(tenantId, actor, { action: 'step.reminder_sent', entityType: 'RequestStep', entityId: requestStepId, requestId: row.RequestId, detail: { stepOrder: row.StepOrder, reason, recipients: recipients.map((r) => r.UserId), dailySummary: summaryOnly.length ? summaryOnly : undefined } }, tx);
   });
 }

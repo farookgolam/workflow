@@ -8,6 +8,7 @@ import { tenantQuery, unscopedQuery, withTx } from '../db/query';
 import { tenantBaseUrlById } from '../tenant';
 import { adminRecipients, emailBody, queueNotification } from '../notifications/outbox';
 import { config } from '../config';
+import { runDailySummaries } from './digest';
 import { remindStep } from './engine';
 
 const MAX_REMINDERS = 10; // stop nagging eventually; the request stays Overdue on the dashboard
@@ -116,6 +117,8 @@ export function startSweeper(intervalMs = 5 * 60_000): () => void {
     try {
       const r = await runSweep();
       if (r.reminded || r.escalated) console.log(`[sweeper] ${r.reminded} reminder(s), ${r.escalated} escalation(s)`);
+      const summaries = await runDailySummaries();
+      if (summaries) console.log(`[sweeper] ${summaries} daily summary email(s)`);
     } catch (err) {
       console.error('[sweeper]', (err as Error).message);
     } finally {
@@ -124,6 +127,6 @@ export function startSweeper(intervalMs = 5 * 60_000): () => void {
   };
   const timer = setInterval(tick, intervalMs);
   void tick();
-  console.log('Reminder/escalation sweeper started');
+  console.log('Reminder/escalation/daily-summary sweeper started');
   return () => clearInterval(timer);
 }

@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError, api, download } from '../api';
 import { FieldGrid, FieldInput, StatusBadge, ValueList, applyLookups, fmtDateTime, initialValues, toPayload, withLookupOptions, type FieldDef, type FieldValue, type GridValue, type Lookups, type Values } from '../fields';
 import { NextApproverPicker, choicePayload, needsChoice, type StepHandOff } from '../approvers';
+import { useAuth } from '../auth';
 import { useLoad } from '../hooks';
 import { waitedFor } from '../dates';
 import { ChangeList, type SendBack } from '../sendback';
@@ -392,6 +393,8 @@ export function RequestPage() {
 
 // ---------------------------------------------------------------------------------------
 export function AccountPage() {
+  const { user } = useAuth();
+  const approver = !!user && (user.roles.includes('Approver') || user.roles.includes('Admin'));
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -410,7 +413,9 @@ export function AccountPage() {
   };
   const field = { className: 'digits', type: 'password', inputMode: 'numeric' as const, maxLength: 6, required: true };
   return (
-    <form className="card" onSubmit={submit} style={{ maxWidth: 440 }}>
+    <div className="stack" style={{ maxWidth: 560 }}>
+    {approver && <ApprovalEmailChoice />}
+    <form className="card" onSubmit={submit}>
       <h1>Change password key</h1>
       {msg && <p className={`notice ${msg.ok ? 'ok' : 'bad'}`} role="status">{msg.text}</p>}
       <div className="field"><label htmlFor="cp">Current key</label><input id="cp" {...field} autoComplete="current-password" value={current} onChange={digits(setCurrent)} /></div>
@@ -419,5 +424,46 @@ export function AccountPage() {
       <button className="primary" type="submit" disabled={current.length !== 6 || next.length !== 6 || confirm.length !== 6}>Change key</button>
       <p className="muted small">Forgotten your current key? Sign out and choose "Forgot your key?" on the sign-in page.</p>
     </form>
+    </div>
+  );
+}
+
+/** An email per request as it arrives, or one summary each weekday morning (server/src/workflow/digest.ts). */
+function ApprovalEmailChoice() {
+  const { data, error } = useLoad<{ emailDigest: boolean; digestHour: number }>('/my/preferences');
+  const [value, setValue] = useState<boolean | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (error) return <div className="card"><p className="notice bad">{error}</p></div>;
+  if (!data) return null;
+  const digest = value ?? data.emailDigest;
+  const hour = `${data.digestHour % 12 || 12}:00 ${data.digestHour < 12 ? 'AM' : 'PM'}`;
+  const choose = async (on: boolean) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api('/my/preferences', { method: 'PUT', body: { emailDigest: on } });
+      setValue(on);
+      setMsg({ ok: true, text: on ? `Done. From now on you get one summary each weekday at ${hour}, and no email per request.` : 'Done. You will be emailed about each request as it arrives.' });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Something went wrong.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="card">
+      <h2 style={{ marginTop: 0 }}>Approval emails</h2>
+      {msg && <p className={`notice ${msg.ok ? 'ok' : 'bad'}`} role="status">{msg.text}</p>}
+      <label className="check" style={{ marginBottom: '.5rem' }}>
+        <input type="radio" name="digest" checked={!digest} disabled={busy} onChange={() => void choose(false)} />
+        <span><strong>Email me about each request as it arrives</strong></span>
+      </label>
+      <label className="check">
+        <input type="radio" name="digest" checked={digest} disabled={busy} onChange={() => void choose(true)} />
+        <span><strong>Send me one summary each morning instead</strong> - Monday to Friday at {hour}, listing everything waiting for you, only when something is</span>
+      </label>
+      <p className="hint">Either way, everything waiting is always on your home page. With the summary you get no separate approval, resubmitted or reminder emails; an administrator's own reminder still reaches you straight away.</p>
+    </section>
   );
 }

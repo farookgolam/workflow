@@ -11,6 +11,7 @@ export type NotificationType =
   | 'Reassigned'
   | 'SentBack'
   | 'Resubmitted'
+  | 'DailySummary'
   | 'AdminRejectedAlert'
   | 'AdminUploadFailed'
   | 'VerificationCode'
@@ -30,7 +31,7 @@ export type EmailLine =
   /** a row of big buttons, e.g. Approve / Reject */
   | { buttons: { link: string; text: string; tone: 'ok' | 'bad' | 'plain' }[] }
   /** a two-column table of values, e.g. the submitted form; nothing at all when empty */
-  | { details: { label: string; value: string }[]; title?: string };
+  | { details: { label: string; value: string; link?: string }[]; title?: string };
 
 const TONE = { ok: '#15803d', bad: '#b91c1c', plain: '#475569' } as const;
 
@@ -47,7 +48,7 @@ export function emailBody(lines: EmailLine[]): string {
       if ('details' in l) {
         if (!l.details.length) return '';
         const rows = l.details
-          .map((d) => `<tr><td style="padding:4px 16px 4px 0;color:#475569;vertical-align:top">${esc(d.label)}</td><td style="padding:4px 0;vertical-align:top">${esc(d.value)}</td></tr>`)
+          .map((d) => `<tr><td style="padding:4px 16px 4px 0;color:#475569;vertical-align:top">${d.link ? `<a href="${esc(d.link)}">${esc(d.label)}</a>` : esc(d.label)}</td><td style="padding:4px 0;vertical-align:top">${esc(d.value)}</td></tr>`)
           .join('');
         return `${l.title ? `<p><strong>${esc(l.title)}</strong></p>` : ''}<table style="border-collapse:collapse;margin:0 0 12px">${rows}</table>`;
       }

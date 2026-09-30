@@ -4,7 +4,7 @@ module.exports = {
   subtitle: 'For people who submit requests and people who approve them',
   audience:
     'This manual explains how to sign in, submit a request and follow its progress, and how to review and decide on requests that are sent to you for approval. Administrators have a separate manual.',
-  version: '1.3',
+  version: '1.4',
   date: 'September 2026',
   blocks: [
     { h1: 'How the system works' },
@@ -57,6 +57,13 @@ module.exports = {
     { p: 'Once you are signed in, choose **Help** in the top-right corner, next to your name, then **User Manual** (this manual) or **How a request works (workflow)** - a two-page sheet: the whole approval process as a diagram, then each step explained with who does it and which emails go out. It opens in a new tab, in your browser\'s own PDF viewer, where you can read, search, save or print it. The manuals can only be opened by people who are signed in; a link to one stops working after a few minutes, so always open it again from **Help** rather than from a saved address.' },
     { h2: 'Changing your password key' },
     { p: 'Click **your name** in the top-right corner, enter your current key and the new one twice, and choose **Change key**. Your other devices are signed out.' },
+    { h2: 'Approval emails: each one, or a morning summary' },
+    { p: 'Approvers can choose how they are emailed about requests waiting for them. Click **your name** in the top-right corner; under **Approval emails** choose:' },
+    { table: { widths: [0.4, 0.6], head: ['Choice', 'What you get'], rows: [
+      ['Email me about each request as it arrives', 'The usual: an **Approval needed** email for each request, plus resubmitted and reminder emails. This is where everyone starts.'],
+      ['Send me one summary each morning instead', 'One email, **Monday to Friday at 7:00 AM**, listing everything waiting for you - request, form, requester, step, how long it has waited, and **OVERDUE** where it applies - with a link to each and an **Open my approvals** button. Nothing is sent on a morning when nothing is waiting. You get no separate approval, resubmitted, reassigned or reminder emails.'],
+    ] } },
+    { p: 'The change takes effect at once. Whichever you choose, everything waiting is always on your home page, and if an administrator presses **Send reminder** for one of your requests, that reminder still reaches you straight away.' },
     { h2: 'Forgotten your password key' },
     { ol: [
       'On the **Sign in** page enter your email and choose **Continue**.',
@@ -156,6 +163,20 @@ module.exports = {
     ] },
     { h2: 'Your inbox: "Waiting for my approval"' },
     { p: 'Your home page lists every request currently waiting for you, oldest first, with the form, submitter, step and how long it has waited. An **Overdue** badge appears once it has passed the reminder period. You can open a request from here without the email.' },
+    { h2: 'Approving several at once' },
+    { p: 'When two or more requests are waiting, each row has a tick box, with **Select all** at the top of the list.' },
+    { ol: [
+      'Tick the requests you want to approve and choose **Approve selected**.',
+      'A panel lists them, each with its first few details (for example the item and the amount). Check each one. **Remove** takes one out of the batch; to look closer, open its request number instead.',
+      'Add **Comments** if you wish - they are added to each one - and **sign** once.',
+      'Choose **Approve N requests**. Each is approved exactly as if you had done it on its own page: the next approver is emailed, or, on the last step, the request is fully approved and its PDF made.',
+    ] },
+    { ul: [
+      'A result list shows each one: moved on to the next step, fully approved, or **not approved** with the reason (for example, somebody else decided it a moment ago). The others are not affected.',
+      'Only **approving** works in a batch. To send back or reject, open the request: those need their own reason.',
+      'A request where approving means **choosing who approves next** cannot be ticked; it says "open to choose who\'s next".',
+      'Up to 50 at a time. Your one signature is saved with each approval and printed in each PDF.',
+    ] },
     { h2: 'The approval page' },
     { table: { widths: [0.3, 0.7], head: ['Section', 'Contents'], rows: [
       ['Original submission', 'Everything the submitter entered. **Read-only.**'],
@@ -202,7 +223,7 @@ module.exports = {
     { p: 'Your section becomes **read-only** for everyone, including you, and so do your signature and any documents you attached. Opening the same email link again shows your recorded decision. A step can be decided only once: if you open the request in two tabs, or a delegate has already acted, the second attempt shows "This step has already been completed".' },
     { h2: 'Reminders, reassignment and delegates' },
     { ul: [
-      'If the form has reminder rules, you receive **"Reminder: approval needed"** emails after the configured number of days. Each contains a fresh link.',
+      'If the form has reminder rules, you receive **"Reminder: approval needed"** emails after the configured number of days. Each contains a fresh link. (Not if you chose the morning summary: it reminds you every weekday instead.)',
       'If a step waits too long, a manager or the administrators may receive an **escalation** notice. Nothing changes for you; the step is still yours.',
       'An administrator can **reassign** your step to someone else (your link then stops working) or add a **delegate** who can act as well as you. Whoever decides first is recorded.',
       'Going on leave? Ask an administrator to add a delegate or reassign your open steps.',

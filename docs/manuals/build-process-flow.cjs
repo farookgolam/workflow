@@ -181,8 +181,8 @@ const steps = [
     'Gives the request its number (for example REQ-000123) and the status In progress, saves exactly what was submitted, and makes step 1 active. The requester sees the request page with its progress tracker.',
     'Requester: "We received your request"'],
   [3, 'Approver emailed', 'System',
-    'Emails the step\'s approver (and any delegate) a personal link that works only for their account and expires after 14 days. The email lists the request details (up to 12 fields, unless the organisation turned this off) and has Approve, Send back and Reject buttons. Reminders and escalation follow the step\'s rules while it waits.',
-    'Approver: "Approval needed"; later "Reminder" if set up'],
+    'Emails the step\'s approver (and any delegate) a personal link that works only for their account and expires after 14 days. The email lists the request details (up to 12 fields, unless the organisation turned this off) and has Approve, Send back and Reject buttons. Reminders and escalation follow the step\'s rules while it waits. Approvers on the morning summary get one email a day instead.',
+    'Approver: "Approval needed"; later "Reminder" if set up (or the daily summary instead)'],
   [4, 'Review the request', 'Approver',
     'Signs in (from the email or the home page list "Waiting for my approval"). Sees the full submission, every earlier step\'s decision, comments, signature and documents, and any earlier send-backs. Never sees later steps. Nothing can be edited.',
     '-'],
@@ -190,7 +190,7 @@ const steps = [
     'Chooses one of three: Approve (go to 6), Send back for changes (go to 9) or Reject (go to 10). A button pressed in the email opens the page ready for that choice; the approver still confirms on the page.',
     '-'],
   [6, 'Sign and approve', 'Approver',
-    'Draws a signature (required to approve). May add comments and attach documents. If the step asks for it, chooses who approves the next step. The decision, time and signature are recorded and can no longer be changed.',
+    'Draws a signature (required to approve). May add comments and attach documents. If the step asks for it, chooses who approves the next step. The decision, time and signature are recorded and can no longer be changed. Several can be approved at once from the home page.',
     '-'],
   [7, 'Last step?', 'System',
     'No: the next step becomes active and its approver is emailed (back to 3 for that approver). Yes: the request is fully approved (go to 8).',
@@ -241,6 +241,8 @@ steps.forEach(([n, title, who, what, mails], i) => {
 
 // administrators, at any point while the request is open
 ty += 10;
+// the strip below is ~44pt tall; the footer line sits at H - 24
+if (ty + 44 > H - 28) throw new Error(`Page 2 is too full (${Math.round(ty + 44)} > ${H - 28}): shorten a step's text`);
 doc.rect(TX, ty, 3, 40).fill(C.warn);
 doc.font(FONT.b).fontSize(9).fillColor(C.text).text('At any time while a request is open - administrators', TX + 10, ty + 1, { width: TW - 12 });
 doc.font(FONT.r).fontSize(7.8).fillColor(C.muted).text(

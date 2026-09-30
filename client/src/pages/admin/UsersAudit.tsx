@@ -139,7 +139,7 @@ export function AdminUsers() {
       <section className="card">
         {error ? <p className="notice bad">{error}</p> : !data ? <p className="muted">Loading…</p> : (
           <table>
-            <thead><tr><th>Name</th><th>Email</th><th>Roles</th><th>Status</th><th>Joined</th><th /></tr></thead>
+            <thead><tr><th>Name</th><th>Email</th><th>Roles</th><th>Status</th><th title="Each person chooses this under their own name">Approval emails</th><th>Joined</th><th /></tr></thead>
             <tbody>{data.users.map((u) => (
               <tr key={u.userId} className={u.isActive ? '' : 'inactive'}>
                 <td>{u.displayName}</td><td>{u.email}</td>
@@ -148,6 +148,7 @@ export function AdminUsers() {
                     onChange={() => void patch(u, { roles: toggle(u.roles, role) }, 'Roles updated.')} /><span>{role}</span></label>))}
                 </td>
                 <td>{!u.isActive ? 'Inactive' : !u.hasKey ? <span className="badge badge-active">No key yet</span> : u.locked ? <span className="badge badge-rejected">Locked</span> : 'Active'}</td>
+                <td className="small">{u.emailDigest ? 'Daily summary' : 'Each request'}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>{new Date(u.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}</td>
                 <td className="row-actions">
                   {u.userId !== me!.userId && <button className="link" disabled={act.busy} onClick={() => void patch(u, { isActive: !u.isActive }, u.isActive ? 'User deactivated.' : 'User reactivated.')}>{u.isActive ? 'Deactivate' : 'Reactivate'}</button>}

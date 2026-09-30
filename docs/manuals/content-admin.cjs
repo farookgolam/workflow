@@ -4,7 +4,7 @@ module.exports = {
   subtitle: 'Configuring forms, approval chains and users, and overseeing requests',
   audience:
     'This manual is for people with the Admin role. It covers the administrator portal: the dashboard, request oversight and actions, form and approval-chain configuration, reports, user management and the audit log. Server installation is covered separately in docs/DEPLOYMENT-IIS.md. Everyday submitting and approving is covered in the User Manual.',
-  version: '1.3',
+  version: '1.4',
   date: 'September 2026',
   blocks: [
     { h1: 'Overview' },
@@ -424,6 +424,8 @@ module.exports = {
       ['Locked', 'Five wrong keys in a row. Unlocks by itself after 15 minutes; a reset also clears it.'],
       ['Inactive', 'Deactivated by an administrator. Cannot sign in or register again with that address.'],
     ] } },
+    { h2: 'Approval emails column' },
+    { p: 'Shows how each person chose to be emailed about approvals waiting for them: **Each request** (the default) or **Daily summary** (one email each weekday at 7:00 AM listing everything waiting, instead of an email per request). It is each person\'s own choice, made under their name at the top right; you can see it but not change it. People on the daily summary still get your **Send reminder** straight away.' },
     { h2: 'Forgotten password keys' },
     { p: 'People normally fix this themselves: on the sign-in page they choose **Forgot your key?**, receive a verification code by email and choose a new key. You are only needed when that route is not available to them - for example they cannot receive the email - or when you want to force someone to choose a new key. In that case choose **Reset password key** in the user\'s row and confirm.' },
     { ul: [
@@ -501,7 +503,8 @@ module.exports = {
       ['auth.password_changed', 'A user changed their own password key.'],
       ['auth.key_reset_requested / auth.key_reset_self', 'A user asked for a forgotten-key code / chose a new key with it.'],
       ['request.submitted / approved / rejected / cancelled', 'Request lifecycle, with from and to states.'],
-      ['step.activated / approved / rejected', 'Step lifecycle. Detail shows asDelegate, viaLink and selfApproval when they apply. A step activated again after a resubmit shows Returned > Active.'],
+      ['step.activated / approved / rejected', 'Step lifecycle. Detail shows asDelegate, viaLink, selfApproval and inBatch (approved several at once) when they apply; dailySummary when the approver was left to their morning summary instead of an email. A step activated again after a resubmit shows Returned > Active.'],
+      ['user.preferences_changed', 'Someone switched between an email per request and the daily summary.'],
       ['step.returned / request.resubmitted', 'An approver sent the request back for changes (with the reason) / the submitter resubmitted it (with the fields they changed).'],
       ['attachment.added / removed / downloaded', 'An approver attached or removed a document on their step, or somebody downloaded one.'],
       ['step.reassigned / step.delegated', 'Administrator changed who can act.'],
@@ -547,7 +550,8 @@ module.exports = {
       ['Changes needed', 'Submitter', 'An approver sends the request back. Includes what to change and a Make the changes button.'],
       ['Resubmitted for approval', 'Approver who sent it back', 'The submitter resubmits. Lists exactly what changed and their note.'],
       ['Approval needed (reassigned)', 'New approver or delegate', 'An admin reassigns or delegates an active step.'],
-      ['Reminder', 'Approver and delegate', 'Admin chooses Send reminder, or the reminder rule is due.'],
+      ['Reminder', 'Approver and delegate', 'Admin chooses Send reminder, or the reminder rule is due (a scheduled reminder is skipped for people on the daily summary).'],
+      ['Requests waiting for your approval (daily summary)', 'Approvers who chose it', 'Monday to Friday at 7:00 AM server time, when anything is waiting for them. Replaces their Approval needed, Resubmitted, Reassigned and scheduled Reminder emails.'],
       ['Escalation', 'Escalation user or admins', 'The step passes its "Escalate after" days. Once per step.'],
       ['Rejected', 'Submitter', 'Any step is rejected. Includes reason, step, approver, date.'],
       ['Rejected (admin alert)', 'Administrators', 'Same moment as above.'],

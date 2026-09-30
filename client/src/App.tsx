@@ -51,7 +51,7 @@ function Shell() {
           <>
             <HelpLink admin={user.roles.includes('Admin')} />
             <ThemeToggle />
-            <Link to="/account" className="who" title="Change password key">{user.displayName}</Link>
+            <Link to="/account" className="who" title="My account: password key and approval emails">{user.displayName}</Link>
             <button className="link" onClick={() => void signOut()}>Sign out</button>
           </>
         )}

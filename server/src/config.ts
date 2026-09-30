@@ -51,6 +51,8 @@ const schema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   MAIL_FROM: z.string().default('Approvals <no-reply@localhost>'),
+  // the daily summary for approvers who chose it goes out from this hour, server time, Monday to Friday
+  DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(7),
   STORAGE_DIR: z.string().default('./storage'),
   // the PDF manuals (docs/manuals/build-manuals.cjs); served to signed-in people only, by /api/v1/help
   MANUALS_DIR: z.string().default('../docs/manuals'),
@@ -121,6 +123,7 @@ export const config = {
     from: env.MAIL_FROM,
     maxAttempts: 6,
     backoffMinutes: [1, 5, 15, 60, 180],
+    digestHour: env.DIGEST_HOUR,
   },
   storageDir: path.resolve(env.STORAGE_DIR),
   manualsDir: path.resolve(env.MANUALS_DIR),
