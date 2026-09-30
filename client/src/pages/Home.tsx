@@ -64,6 +64,8 @@ function WaitingForMe() {
   const [comments, setComments] = useState('');
   const [signature, setSignature] = useState('');
   const [choices, setChoices] = useState<Record<number, string>>({}); // who each request goes to next, where that is chosen
+  const [notes, setNotes] = useState<Record<number, string>>({}); // a comment for one request only, added after the shared one
+  const [noteOpen, setNoteOpen] = useState<Set<number>>(new Set());
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ results: BatchResult[]; names: Map<number, Pending> } | null>(null);
@@ -89,7 +91,8 @@ function WaitingForMe() {
     try {
       const res = await api<{ approved: number; results: BatchResult[] }>('/approvals/batch-approve', {
         method: 'POST',
-        body: { requestStepIds: chosen.map((r) => r.requestStepId), comments: comments.trim() || undefined, signature: JSON.parse(signature), next },
+        body: { requestStepIds: chosen.map((r) => r.requestStepId), comments: comments.trim() || undefined, signature: JSON.parse(signature), next,
+          notes: Object.fromEntries(chosen.filter((r) => notes[r.requestStepId]?.trim()).map((r) => [r.requestStepId, notes[r.requestStepId].trim()])) },
       });
       setDone({ results: res.results, names: new Map(chosen.map((r) => [r.requestStepId, r])) });
       setPicked(new Set());
@@ -97,9 +100,11 @@ function WaitingForMe() {
       setComments('');
       setSignature('');
       setChoices({});
+      setNotes({});
+      setNoteOpen(new Set());
       pending.reload();
     } catch (e) {
-      setError(e instanceof ApiError ? (e.fieldErrors.signature ?? e.message) : 'Something went wrong. Nothing was approved.');
+      setError(e instanceof ApiError ? (Object.values(e.fieldErrors)[0] ?? e.message) : 'Something went wrong. Nothing was approved.');
     } finally {
       setBusy(false);
     }
@@ -153,12 +158,22 @@ function WaitingForMe() {
                     <UseForAll row={r} rows={chosen} choices={choices} disabled={busy} onApply={setChoices} />
                   </div>
                 )}
+                {noteOpen.has(r.requestStepId) || notes[r.requestStepId] ? (
+                  <div className="field" style={{ margin: '.5rem 0 0' }}>
+                    <label htmlFor={`note-${r.requestStepId}`}>Comment for {r.requestNumber} only</label>
+                    <textarea id={`note-${r.requestStepId}`} rows={2} maxLength={4000} value={notes[r.requestStepId] ?? ''} disabled={busy} autoFocus={!notes[r.requestStepId]}
+                      onChange={(e) => setNotes((n) => ({ ...n, [r.requestStepId]: e.target.value }))} />
+                  </div>
+                ) : (
+                  <button type="button" className="link small" disabled={busy} onClick={() => setNoteOpen((o) => new Set(o).add(r.requestStepId))}>Add a comment for this request</button>
+                )}
               </li>
             ))}
           </ul>
           <div className="field">
-            <label htmlFor="batch-comments">Comments (added to each)</label>
+            <label htmlFor="batch-comments">Comment for all of them</label>
             <textarea id="batch-comments" rows={2} maxLength={4000} value={comments} disabled={busy} onChange={(e) => setComments(e.target.value)} />
+            <p className="hint">Optional. Saved on every request above; a request's own comment is added after it.</p>
           </div>
           <div className="field">
             <label htmlFor="batch-signature">Your signature<em className="req"> *</em></label>

@@ -234,6 +234,7 @@ const MAX_BATCH = 50;
  * its own, exactly like a single approval - its own transaction, emails and next step - so one that cannot be
  * approved (decided meanwhile, next approver not chosen, ...) is reported and the rest go ahead. Where approving
  * means choosing who is next, `next` carries that choice for the request: a user id, or a row of the step's list.
+ * `notes` are comments for one request only; each approval's comment is the shared one followed by its own.
  */
 approvalsRouter.post('/batch-approve', async (req, res) => {
   const body = z.object({
@@ -241,7 +242,14 @@ approvalsRouter.post('/batch-approve', async (req, res) => {
     comments: z.string().max(4000).optional(),
     signature: z.unknown(),
     next: z.record(z.string().regex(/^\d+$/), z.object({ userId: z.number().int().positive().max(2147483647).optional(), key: z.string().min(1).max(400).optional() })).default({}),
+    notes: z.record(z.string().regex(/^\d+$/), z.string().max(4000)).default({}),
   }).parse(req.body);
+  // shared comment, then the request's own - together they must still fit the 4000 characters of a step's comment
+  const commentFor = (id: number) => [body.comments?.trim(), body.notes[String(id)]?.trim()].filter(Boolean).join('\n\n') || undefined;
+  const tooLong = body.requestStepIds.filter((id) => (commentFor(id)?.length ?? 0) > 4000);
+  if (tooLong.length) {
+    throw new AppError(400, 'validation_failed', 'Invalid input', tooLong.map((id) => ({ path: `notes.${id}`, message: 'The shared comment and this one together are longer than 4000 characters' })));
+  }
   const sig = body.signature === undefined ? { value: null } : checkSignature(body.signature);
   if ('error' in sig || !sig.value) {
     throw new AppError(400, 'validation_failed', 'Invalid input', [{ path: 'signature', message: 'error' in sig ? `Signature ${sig.error}` : 'Sign to approve' }]);
@@ -253,7 +261,7 @@ approvalsRouter.post('/batch-approve', async (req, res) => {
     try {
       const choice = body.next[String(requestStepId)];
       const r = await decideStep(u.tenantId, actorFrom(req), { userId: u.userId, displayName: u.displayName }, requestStepId,
-        { decision: 'approve', signature: body.signature, comments: body.comments, batch: true, nextApproverUserId: choice?.userId, nextApproverKey: choice?.key });
+        { decision: 'approve', signature: body.signature, comments: commentFor(requestStepId), batch: true, nextApproverUserId: choice?.userId, nextApproverKey: choice?.key });
       results.push({ requestStepId, ok: true, ...r });
     } catch (err) {
       if (!(err instanceof AppError)) throw err;

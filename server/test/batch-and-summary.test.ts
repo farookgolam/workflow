@@ -62,9 +62,12 @@ describe('approve several at once', () => {
     const [s3] = await stepsOf(r3);
 
     expect((await batch('ann', { requestStepIds: [s1.RequestStepId] })).status).toBe(400); // no signature
+    const long = await batch('ann', { requestStepIds: [s1.RequestStepId], signature: SIGNED, comments: 'x'.repeat(3000), notes: { [s1.RequestStepId]: 'y'.repeat(1500) } });
+    expect(long.status).toBe(400); // shared + own over 4000
+    expect(long.body.error.details[0].path).toBe(`notes.${s1.RequestStepId}`);
     expect((await stepsOf(r1))[0].Status).toBe('Active');
 
-    const res = await batch('ann', { requestStepIds: [s1.RequestStepId, s2.RequestStepId, s3.RequestStepId], signature: SIGNED, comments: 'All fine' });
+    const res = await batch('ann', { requestStepIds: [s1.RequestStepId, s2.RequestStepId, s3.RequestStepId], signature: SIGNED, comments: 'All fine', notes: { [s2.RequestStepId]: '  Receipt checked  ' } });
     expect(res.status).toBe(200);
     expect(res.body.approved).toBe(2);
     expect(res.body.results).toEqual([
@@ -84,7 +87,9 @@ describe('approve several at once', () => {
     expect(Object.fromEntries(assigned.map((x) => [x.RequestId, x.AssignedUserId]))).toEqual({ [r3]: ids.bob, [r5]: ids.admin });
 
     const [row] = await tenantQuery<{ Comments: string; Signature: string }>(t.tenantId, 'SELECT Comments, Signature FROM RequestSteps WHERE TenantId = @TenantId AND RequestStepId = @S', { S: s2.RequestStepId });
-    expect(row.Comments).toBe('All fine');
+    expect(row.Comments).toBe('All fine\n\nReceipt checked'); // shared, then its own
+    const [other] = await tenantQuery<{ Comments: string }>(t.tenantId, 'SELECT Comments FROM RequestSteps WHERE TenantId = @TenantId AND RequestStepId = @S', { S: s1.RequestStepId });
+    expect(other.Comments).toBe('All fine');
     expect(row.Signature).toBeTruthy();
     const [a] = await tenantQuery<{ DetailJson: string }>(t.tenantId, `SELECT DetailJson FROM AuditLog WHERE TenantId = @TenantId AND Action = 'step.approved' AND EntityId = @S`, { S: s1.RequestStepId });
     expect(JSON.parse(a.DetailJson)).toMatchObject({ inBatch: true });

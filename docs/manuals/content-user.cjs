@@ -168,7 +168,7 @@ module.exports = {
     { ol: [
       'Tick the requests you want to approve and choose **Approve selected**.',
       'A panel lists them, each with its first few details (for example the item and the amount). Check each one. **Remove** takes one out of the batch; to look closer, open its request number instead.',
-      'Add **Comments** if you wish - they are added to each one - and **sign** once.',
+      'Comments are optional. **Comment for all of them** is saved on every request in the batch. To say something about one request only, choose **Add a comment for this request** under it: that request gets the shared comment followed by its own. Then **sign** once.',
       'Choose **Approve N requests**. Each is approved exactly as if you had done it on its own page: the next approver is emailed, or, on the last step, the request is fully approved and its PDF made.',
     ] },
     { ul: [
