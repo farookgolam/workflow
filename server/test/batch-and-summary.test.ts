@@ -46,7 +46,11 @@ describe('approve several at once', () => {
     const list = await pending('ann');
     const byId = Object.fromEntries(list.map((p: { requestId: number }) => [p.requestId, p]));
     expect(byId[a]).toMatchObject({ choosesNext: false, preview: [{ label: 'Title', value: 'Desk' }, { label: 'Amount', value: '100.00' }] });
-    expect(byId[b]).toMatchObject({ choosesNext: true });
+    expect(byId[b]).toMatchObject({ choosesNext: true, nextStep: { stepOrder: 2, name: 'Next', mode: 'chosen' } });
+    // the choices offered for the next step: every approver except the one handing on and the submitter
+    expect(byId[b].nextStep.candidates.map((c: { userId: number }) => c.userId)).toEqual(expect.arrayContaining([ids.bob, ids.dee]));
+    expect(byId[b].nextStep.candidates.map((c: { userId: number }) => c.userId)).not.toContain(ids.ann);
+    expect(byId[a].nextStep).toBeNull();
   });
 
   it('approves each with one signature, reports the ones it could not, and records the batch', async () => {
@@ -66,10 +70,18 @@ describe('approve several at once', () => {
     expect(res.body.results).toEqual([
       { requestStepId: s1.RequestStepId, ok: true, requestStatus: 'InProgress', nextStepOrder: 2 },
       { requestStepId: s2.RequestStepId, ok: true, requestStatus: 'InProgress', nextStepOrder: 2 },
-      { requestStepId: s3.RequestStepId, ok: false, message: 'The next approver has to be chosen: open it to approve' },
+      { requestStepId: s3.RequestStepId, ok: false, message: 'Choose who approves "Next"' },
     ]);
     expect((await stepsOf(r1)).map((s) => s.Status)).toEqual(['Approved', 'Active']);
     expect((await stepsOf(r3)).map((s) => s.Status)).toEqual(['Active', 'Waiting']);
+
+    // with the choice made in the batch, it goes through - to the person chosen
+    const r5 = await submit(chooseForm);
+    const [s5] = await stepsOf(r5);
+    const withChoice = await batch('ann', { requestStepIds: [s3.RequestStepId, s5.RequestStepId], signature: SIGNED, next: { [s3.RequestStepId]: { userId: ids.bob }, [s5.RequestStepId]: { userId: ids.admin } } });
+    expect(withChoice.body.approved).toBe(2);
+    const assigned = await tenantQuery<{ RequestId: number; AssignedUserId: number }>(t.tenantId, 'SELECT RequestId, AssignedUserId FROM RequestSteps WHERE TenantId = @TenantId AND StepOrder = 2 AND RequestId IN (@A, @B)', { A: r3, B: r5 });
+    expect(Object.fromEntries(assigned.map((x) => [x.RequestId, x.AssignedUserId]))).toEqual({ [r3]: ids.bob, [r5]: ids.admin });
 
     const [row] = await tenantQuery<{ Comments: string; Signature: string }>(t.tenantId, 'SELECT Comments, Signature FROM RequestSteps WHERE TenantId = @TenantId AND RequestStepId = @S', { S: s2.RequestStepId });
     expect(row.Comments).toBe('All fine');

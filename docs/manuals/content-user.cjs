@@ -174,7 +174,7 @@ module.exports = {
     { ul: [
       'A result list shows each one: moved on to the next step, fully approved, or **not approved** with the reason (for example, somebody else decided it a moment ago). The others are not affected.',
       'Only **approving** works in a batch. To send back or reject, open the request: those need their own reason.',
-      'A request where approving means **choosing who approves next** cannot be ticked; it says "open to choose who\'s next".',
+      'Where approving means **choosing who approves next**, the panel shows a **Send to** box under that request - choose for each one (they can go to different people). After choosing for one, **Send the other ... to <name> too** fills in the rest in one click. **Approve** asks for any that are still missing.',
       'Up to 50 at a time. Your one signature is saved with each approval and printed in each PDF.',
     ] },
     { h2: 'The approval page' },

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, api } from '../api';
+import { NextApproverPicker, choicePayload, needsChoice, optionId, type StepHandOff } from '../approvers';
 import { useAuth } from '../auth';
 import { waitedFor } from '../dates';
 import { fmtDateTime } from '../fields';
@@ -11,8 +12,9 @@ import { MySubmissions } from './Requests';
 interface Pending {
   requestStepId: number; requestId: number; requestNumber: string; formName: string; submitterName: string; stepOrder: number; totalSteps: number; stepName: string;
   activatedAt: string; dueAt: string | null; overdue: boolean;
-  /** approving means choosing who approves next: one at a time only */
+  /** approving means choosing who approves next: the batch panel asks for it, per request */
   choosesNext: boolean;
+  nextStep: StepHandOff | null;
   preview: { label: string; value: string }[];
 }
 interface FormSummary { formId: number; name: string; description: string | null }
@@ -61,31 +63,40 @@ function WaitingForMe() {
   const [open, setOpen] = useState(false); // the batch panel
   const [comments, setComments] = useState('');
   const [signature, setSignature] = useState('');
+  const [choices, setChoices] = useState<Record<number, string>>({}); // who each request goes to next, where that is chosen
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ results: BatchResult[]; names: Map<number, Pending> } | null>(null);
 
   const rows = pending.data?.approvals ?? [];
-  const pickable = rows.filter((r) => !r.choosesNext);
+  const pickable = rows;
   const chosen = rows.filter((r) => picked.has(r.requestStepId));
   const toggle = (id: number) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else if (n.size < MAX_BATCH) n.add(id); return n; });
   const all = pickable.length > 0 && pickable.every((r) => picked.has(r.requestStepId));
   const toggleAll = () => setPicked(all ? new Set() : new Set(pickable.slice(0, MAX_BATCH).map((r) => r.requestStepId)));
 
+  const unchosen = chosen.filter((r) => needsChoice(r.nextStep, choices[r.requestStepId] ?? null));
   const approve = async () => {
     setError('');
+    if (unchosen.length) return setError(`Choose who each request goes to next (${unchosen.map((r) => r.requestNumber).join(', ')}).`);
     if (!signature) return setError('Sign to approve.');
+    // { nextApproverUserId } or { nextApproverKey } per request, as the server's batch takes it: { userId } or { key }
+    const next = Object.fromEntries(chosen.filter((r) => r.nextStep?.mode === 'chosen').map((r) => {
+      const c = choicePayload(r.nextStep, choices[r.requestStepId] ?? null, 'next') as { nextApproverUserId?: number; nextApproverKey?: string };
+      return [r.requestStepId, { userId: c.nextApproverUserId, key: c.nextApproverKey }];
+    }));
     setBusy(true);
     try {
       const res = await api<{ approved: number; results: BatchResult[] }>('/approvals/batch-approve', {
         method: 'POST',
-        body: { requestStepIds: chosen.map((r) => r.requestStepId), comments: comments.trim() || undefined, signature: JSON.parse(signature) },
+        body: { requestStepIds: chosen.map((r) => r.requestStepId), comments: comments.trim() || undefined, signature: JSON.parse(signature), next },
       });
       setDone({ results: res.results, names: new Map(chosen.map((r) => [r.requestStepId, r])) });
       setPicked(new Set());
       setOpen(false);
       setComments('');
       setSignature('');
+      setChoices({});
       pending.reload();
     } catch (e) {
       setError(e instanceof ApiError ? (e.fieldErrors.signature ?? e.message) : 'Something went wrong. Nothing was approved.');
@@ -135,6 +146,13 @@ function WaitingForMe() {
                   <button className="link" disabled={busy} onClick={() => toggle(r.requestStepId)}>Remove</button>
                 </div>
                 {r.preview.length > 0 && <p className="muted small" style={{ margin: '.2rem 0 0' }}>{r.preview.map((f) => `${f.label}${/[?:]$/.test(f.label) ? '' : ':'} ${f.value}`).join(' · ')}</p>}
+                {r.choosesNext && r.nextStep && (
+                  <div style={{ marginTop: '.5rem' }}>
+                    <NextApproverPicker id={`next-${r.requestStepId}`} step={r.nextStep} totalSteps={r.totalSteps} when="as soon as you approve" value={choices[r.requestStepId] ?? null} disabled={busy}
+                      onChange={(v) => setChoices((c) => ({ ...c, [r.requestStepId]: v }))} />
+                    <UseForAll row={r} rows={chosen} choices={choices} disabled={busy} onApply={setChoices} />
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -168,8 +186,7 @@ function WaitingForMe() {
               <tr key={p.requestStepId}>
                 {pickable.length > 1 && (
                   <td>
-                    <input type="checkbox" aria-label={`Select ${p.requestNumber}`} checked={picked.has(p.requestStepId)} disabled={p.choosesNext}
-                      title={p.choosesNext ? 'Open it to approve: you choose who approves next' : undefined} onChange={() => toggle(p.requestStepId)} />
+                    <input type="checkbox" aria-label={`Select ${p.requestNumber}`} checked={picked.has(p.requestStepId)} onChange={() => toggle(p.requestStepId)} />
                   </td>
                 )}
                 <td><Link to={`/approvals/${p.requestStepId}`}>{p.requestNumber}</Link></td>
@@ -179,7 +196,6 @@ function WaitingForMe() {
                 <td>{fmtDateTime(p.activatedAt)} <span className="muted small">({waitedFor(p.activatedAt)})</span></td>
                 <td>
                   {p.overdue && <span className="badge badge-rejected">Overdue</span>}
-                  {p.choosesNext && pickable.length > 1 && <span className="muted small"> open to choose who's next</span>}
                 </td>
               </tr>
             ))}
@@ -187,5 +203,23 @@ function WaitingForMe() {
         </table>
       )}
     </section>
+  );
+}
+
+/** After choosing on one request: give the same person to every other request in the batch that can go to them. */
+function UseForAll({ row, rows, choices, disabled, onApply }: {
+  row: Pending; rows: Pending[]; choices: Record<number, string>; disabled: boolean; onApply(next: Record<number, string>): void;
+}) {
+  const value = choices[row.requestStepId];
+  if (!value || !row.nextStep) return null;
+  const person = row.nextStep.candidates.find((c) => optionId(row.nextStep!, c) === value);
+  const others = rows.filter((o) => o !== row && o.nextStep?.mode === 'chosen' && choices[o.requestStepId] !== value
+    && o.nextStep.candidates.some((c) => optionId(o.nextStep!, c) === value));
+  if (!person || others.length === 0) return null;
+  return (
+    <button type="button" className="link small" disabled={disabled}
+      onClick={() => onApply({ ...choices, ...Object.fromEntries(others.map((o) => [o.requestStepId, value])) })}>
+      Send the other {others.length === 1 ? 'one' : others.length} to {person.displayName} too
+    </button>
   );
 }

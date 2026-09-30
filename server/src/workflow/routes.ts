@@ -8,7 +8,7 @@ import { tenantQuery } from '../db/query';
 import { getFormFields, listActiveForms } from '../forms/service';
 import { AppError } from '../http/errors';
 import { lookupDataForFields } from '../lookups/service';
-import { firstStepHandOff, nextStepHandOff } from './approvers';
+import { firstStepHandOff, nextStepHandOff, type StepHandOff } from './approvers';
 import { decideStep, resubmitRequest, submitRequest } from './engine';
 import { checkSignature } from '../forms/sigpad';
 import { emailValue } from './emailDetails';
@@ -210,9 +210,13 @@ approvalsRouter.get('/pending', async (req, res) => {
         { Ids: JSON.stringify(approvals.map((a) => a.requestId)) },
       )
     : [];
+  // where approving means choosing who is next, the choices - so a batch can make them too, one per request
+  const nextSteps = new Map<number, StepHandOff | null>();
+  for (const a of approvals) if (a.choosesNext) nextSteps.set(a.requestStepId, await nextStepHandOff(tenantId, a.requestId, a.stepOrder, userId));
   res.json({
     approvals: approvals.map((a) => ({
       ...a,
+      nextStep: nextSteps.get(a.requestStepId) ?? null,
       preview: data
         .filter((d) => d.RequestId === a.requestId)
         .map((d) => ({ label: d.FieldLabel, value: emailValue(d.FieldType, d.Value) }))
@@ -228,13 +232,15 @@ const MAX_BATCH = 50;
 /**
  * Approve several waiting requests at once with one signature (and optional comment for all). Each is decided on
  * its own, exactly like a single approval - its own transaction, emails and next step - so one that cannot be
- * approved (decided meanwhile, needs the next approver chosen, ...) is reported and the rest go ahead.
+ * approved (decided meanwhile, next approver not chosen, ...) is reported and the rest go ahead. Where approving
+ * means choosing who is next, `next` carries that choice for the request: a user id, or a row of the step's list.
  */
 approvalsRouter.post('/batch-approve', async (req, res) => {
   const body = z.object({
     requestStepIds: z.array(z.number().int().positive().max(2147483647)).min(1).max(MAX_BATCH),
     comments: z.string().max(4000).optional(),
     signature: z.unknown(),
+    next: z.record(z.string().regex(/^\d+$/), z.object({ userId: z.number().int().positive().max(2147483647).optional(), key: z.string().min(1).max(400).optional() })).default({}),
   }).parse(req.body);
   const sig = body.signature === undefined ? { value: null } : checkSignature(body.signature);
   if ('error' in sig || !sig.value) {
@@ -245,13 +251,15 @@ approvalsRouter.post('/batch-approve', async (req, res) => {
   const results: { requestStepId: number; ok: boolean; requestStatus?: string; nextStepOrder?: number | null; message?: string }[] = [];
   for (const requestStepId of [...new Set(body.requestStepIds)]) {
     try {
+      const choice = body.next[String(requestStepId)];
       const r = await decideStep(u.tenantId, actorFrom(req), { userId: u.userId, displayName: u.displayName }, requestStepId,
-        { decision: 'approve', signature: body.signature, comments: body.comments, batch: true });
+        { decision: 'approve', signature: body.signature, comments: body.comments, batch: true, nextApproverUserId: choice?.userId, nextApproverKey: choice?.key });
       results.push({ requestStepId, ok: true, ...r });
     } catch (err) {
       if (!(err instanceof AppError)) throw err;
       const choose = err.code === 'validation_failed' && Array.isArray(err.details) && (err.details as { path: string }[]).some((d) => d.path.startsWith('next'));
-      results.push({ requestStepId, ok: false, message: choose ? 'The next approver has to be chosen: open it to approve' : err.message });
+      const detail = choose ? (err.details as { message: string }[])[0]?.message : undefined;
+      results.push({ requestStepId, ok: false, message: detail ?? err.message });
     }
   }
   res.json({ approved: results.filter((r) => r.ok).length, results });
