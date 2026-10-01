@@ -2,7 +2,10 @@
 //   node docs/manuals/build-manuals.cjs            (the three in-app manuals)
 //   node docs/manuals/build-manuals.cjs release    (only content-release.cjs: the release process guide; any content-<name>.cjs the same way)
 // Uses the pdfkit already installed for the server. Text supports **bold**. Block types:
-//   h1 (starts a new page, appears in the contents), h2, p, ul, ol, note {kind: note|important|tip}, table {head, rows, widths}
+//   h1 (starts a new page, appears in the contents), h2, p, ul, ol, note {kind: note|important|tip}, table {head, rows, widths},
+//   img {img: 'screens/x.jpg', caption?, width? (share of the page width), maxH? (points)},
+//   task {task: title (listed in the contents), need?, steps: [text | {text, img, width?, maxH?}], result?, trouble?: [text]}
+// Pages are US Letter. Screenshots come from screenshots.cjs (docs/manuals/screens).
 const fs = require('node:fs');
 const path = require('node:path');
 const { createRequire } = require('node:module');
@@ -15,7 +18,7 @@ const C = { ink: '#111827', muted: '#5b6472', rule: '#d9dde3', soft: '#f3f4f6', 
 const M = { left: 60, right: 60, top: 78, bottom: 66 };
 
 function render(manual, outFile, tocPageNumbers) {
-  const doc = new PDFDocument({ size: 'A4', margins: M, bufferPages: true, info: { Title: manual.title, Author: manual.brand ?? 'FileBank WorkFlow', Subject: manual.subtitle } });
+  const doc = new PDFDocument({ size: manual.size ?? 'LETTER', margins: M, bufferPages: true, info: { Title: manual.title, Author: manual.brand ?? 'FileBank WorkFlow', Subject: manual.subtitle } });
   const stream = fs.createWriteStream(outFile);
   doc.pipe(stream);
   const W = doc.page.width - M.left - M.right;
@@ -52,14 +55,73 @@ function render(manual, outFile, tocPageNumbers) {
   doc.addPage();
   doc.font(F.b).fontSize(20).fillColor(C.ink).text('Contents', M.left, M.top);
   doc.moveDown(0.8);
-  manual.blocks.filter((b) => b.h1).forEach((b, i) => {
-    const y = doc.y;
+  let n = 0;
+  manual.blocks.filter((b) => b.h1 || b.task).forEach((b, i) => {
     const page = tocPageNumbers ? String(tocPageNumbers[i]) : '';
-    doc.font(F.r).fontSize(11.5).fillColor(C.ink).text(`${i + 1}.  ${b.h1}`, M.left, y, { width: W - 40, lineBreak: false });
-    doc.fillColor(C.muted).text(page, M.left, y, { width: W, align: 'right', lineBreak: false });
-    doc.moveTo(M.left, y + 17).lineTo(M.left + W, y + 17).lineWidth(0.5).strokeColor(C.rule).stroke();
-    doc.y = y + 24;
+    if (b.h1) {
+      if (doc.y + 44 > bottom()) { doc.addPage(); doc.y = M.top; }
+      doc.y += n ? 8 : 0;
+      const y = doc.y;
+      doc.font(F.b).fontSize(11.5).fillColor(C.ink).text(`${++n}.  ${b.h1}`, M.left, y, { width: W - 40, lineBreak: false });
+      doc.fillColor(C.muted).text(page, M.left, y, { width: W, align: 'right', lineBreak: false });
+      doc.moveTo(M.left, y + 17).lineTo(M.left + W, y + 17).lineWidth(0.5).strokeColor(C.rule).stroke();
+      doc.y = y + 22;
+    } else {
+      if (doc.y + 18 > bottom()) { doc.addPage(); doc.y = M.top; }
+      const y = doc.y;
+      doc.font(F.r).fontSize(10).fillColor(C.ink).text(b.task, M.left + 22, y, { width: W - 70, lineBreak: false });
+      doc.fillColor(C.muted).text(page, M.left, y, { width: W, align: 'right', lineBreak: false });
+      doc.y = y + 16;
+    }
   });
+
+  // ---- pictures ----
+  // a screenshot, scaled to `share` of the width (never taller than maxH), framed; a new page when it does not fit
+  const images = new Map();
+  /** How big a screenshot will be drawn: `share` of the width at x, never taller than maxH. */
+  function picSize(src, x, share, maxH) {
+    const file = path.join(__dirname, src);
+    if (!fs.existsSync(file)) throw new Error(`missing screenshot ${src} - run screenshots.cjs`);
+    if (!images.has(file)) images.set(file, doc.openImage(file));
+    const img = images.get(file);
+    const avail = (W - (x - M.left)) * (share ?? 1);
+    let w = avail, h = (w * img.height) / img.width;
+    const cap = Math.min(maxH ?? 330, bottom() - M.top - 30);
+    if (h > cap) { h = cap; w = (h * img.width) / img.height; }
+    return { img, w, h, avail };
+  }
+  function picture(src, x, share, maxH, caption) {
+    let { img, w, h, avail } = picSize(src, x, share, maxH);
+    const capH = caption ? measure(caption, avail, 8.5) + 4 : 0;
+    // nearly fits: shrink it a little rather than leave a large gap and start a new page
+    const room = bottom() - doc.y - capH - 14;
+    if (h > room && room >= h * 0.8) { w = (w * room) / h; h = room; }
+    ensure(h + capH + 14);
+    const y = doc.y + 4;
+    doc.image(img, x, y, { width: w, height: h });
+    doc.rect(x, y, w, h).lineWidth(0.6).strokeColor(C.rule).stroke();
+    doc.y = y + h + 6;
+    if (caption) { rich(caption, x, doc.y, avail, 8.5, C.muted); doc.y += 2; }
+    doc.y += 6;
+  }
+  function box(text, kind) {
+    const [bg, bar, label] = kind === 'result' ? [C.okSoft, C.ok, 'Result'] : kind === 'trouble' ? [C.warnSoft, C.warn, 'If something goes wrong'] : kind === 'important' ? [C.warnSoft, C.warn, 'Important'] : kind === 'tip' ? [C.okSoft, C.ok, 'Tip'] : [C.accentSoft, C.accent, 'Note'];
+    const lines = Array.isArray(text) ? text : [text];
+    const h = lines.reduce((a, l) => a + measure(l, W - 40, 10) + 3, 0) + 27;
+    ensure(h + 8);
+    const y = doc.y;
+    doc.rect(M.left, y, W, h).fill(bg);
+    doc.rect(M.left, y, 3, h).fill(bar);
+    doc.font(F.b).fontSize(9).fillColor(bar).text(label.toUpperCase(), M.left + 14, y + 9, { characterSpacing: 0.8 });
+    doc.y = y + 22;
+    for (const l of lines) {
+      const ly = doc.y;
+      if (lines.length > 1) doc.font(F.r).fontSize(10).fillColor(C.muted).text('•', M.left + 14, ly, { width: 10, lineBreak: false });
+      rich(l, M.left + (lines.length > 1 ? 26 : 14), ly, W - 40, 10);
+      doc.y += 3;
+    }
+    doc.y = y + h + 10;
+  }
 
   // ---- body ----
   let chapter = 0;
@@ -94,6 +156,31 @@ function render(manual, outFile, tocPageNumbers) {
         doc.y += 4;
       });
       doc.y += 4;
+    } else if (b.img) {
+      picture(b.img, M.left, b.width, b.maxH, b.caption);
+    } else if (b.task) {
+      // the title, kept with what follows it
+      ensure(110);
+      doc.y += 10;
+      headings.push(doc.bufferedPageRange().count);
+      doc.font(F.b).fontSize(14).fillColor(C.ink).text(b.task, M.left, doc.y, { width: W });
+      doc.y += 4;
+      if (b.need) { rich(`**You need:** ${b.need}`, M.left, doc.y, W, 10, C.muted); doc.y += 6; }
+      (b.steps || []).forEach((st, i) => {
+        const s = typeof st === 'string' ? { text: st } : st;
+        const h = measure(s.text, W - 30, 10.5);
+        // a step stays on the same page as its picture (a picture may shrink to 80% to fit, see picture())
+        const pic = s.img ? picSize(s.img, M.left + 28, s.width, s.maxH).h * 0.8 + 20 : 0;
+        ensure(h + 6 + pic);
+        const y = doc.y;
+        doc.circle(M.left + 9, y + 7, 9).fill(C.accent);
+        doc.font(F.b).fontSize(9.5).fillColor('#ffffff').text(String(i + 1), M.left, y + 2.5, { width: 18, align: 'center', lineBreak: false });
+        rich(s.text, M.left + 28, y, W - 28, 10.5);
+        doc.y += 5;
+        if (s.img) picture(s.img, M.left + 28, s.width, s.maxH, s.caption);
+      });
+      if (b.result) box(b.result, 'result');
+      if (b.trouble) box(b.trouble, 'trouble');
     } else if (b.note) {
       const kind = b.kind || 'note';
       const [bg, bar, label] = kind === 'important' ? [C.warnSoft, C.warn, 'Important'] : kind === 'tip' ? [C.okSoft, C.ok, 'Tip'] : [C.accentSoft, C.accent, 'Note'];
