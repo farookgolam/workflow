@@ -48,10 +48,16 @@ beforeAll(async () => {
 afterAll(closePool);
 
 describe('file naming', () => {
-  it('follows [FormName]_[RequestID]_[YYYYMMDD].pdf and the _REJECTED_ variant, with names safe anywhere', () => {
-    const base = { formName: 'Capex: Request / 2026', requestNumber: 'REQ-000042', closedAt: new Date('2026-09-20T23:59:00Z') };
-    expect(archiveFileName({ ...base, status: 'Approved' })).toBe('Capex-Request-2026_REQ-000042_20260920.pdf');
-    expect(archiveFileName({ ...base, status: 'Rejected' })).toBe('Capex-Request-2026_REQ-000042_REJECTED_20260920.pdf');
+  it('is [form name cut at 10 characters]_[number without REQ-]_[submitted ddmmyyyy].pdf, safe anywhere', () => {
+    const on = new Date(2026, 8, 20, 9, 30); // 20 September 2026, server time
+    const name = (formName: string) => archiveFileName({ formName, requestNumber: 'REQ-000042', submittedAt: on });
+    expect(name('Timesheet')).toBe('Timesheet_000042_20092026.pdf');
+    expect(name('Purchase Request')).toBe('Purchase-R_000042_20092026.pdf');
+    expect(name('Leave Application Form 2026')).toBe('Leave-Appl_000042_20092026.pdf');
+    expect(name('Expenditure Report')).toBe('Expenditur_000042_20092026.pdf');
+    expect(name('Capex: Request / 2026')).toBe('Capex-Requ_000042_20092026.pdf'); // unsafe characters dropped first
+    expect(name('Tax  Form ')).toBe('Tax-Form_000042_20092026.pdf'); // no doubled or trailing '-'
+    expect(name('???')).toBe('Form_000042_20092026.pdf');
   });
 });
 
@@ -64,7 +70,7 @@ describe('archive pipeline', () => {
     expect(await archiveRow(requestId)).toMatchObject({ Status: 'Approved', ArchiveStatus: 'Stored', PdfLocalPath: null });
 
     const doc = await storedPdf(requestId);
-    expect(doc.FileName).toMatch(/^Capex-Request-2026_REQ-\d{6}_\d{8}\.pdf$/);
+    expect(doc.FileName).toMatch(/^Capex-Requ_\d{6}_\d{8}\.pdf$/);
     expect(doc.SizeBytes).toBe(doc.Content.length);
     expect(doc.Sha256.equals(crypto.createHash('sha256').update(doc.Content).digest())).toBe(true);
     expect(doc.Content.subarray(0, 5).toString()).toBe('%PDF-');
@@ -81,7 +87,7 @@ describe('archive pipeline', () => {
     await processArchive({ tenantId: t.tenantId });
     expect(await archiveRow(requestId)).toMatchObject({ Status: 'Rejected', ArchiveStatus: 'Stored' });
     const doc = await storedPdf(requestId);
-    expect(doc.FileName).toMatch(/^Capex-Request-2026_REQ-\d{6}_REJECTED_\d{8}\.pdf$/);
+    expect(doc.FileName).toMatch(/^Capex-Requ_\d{6}_\d{8}\.pdf$/); // rejected ones are named the same way
     expect(doc.Content.toString('latin1')).toContain('(REJECTED - Capex');
   });
 
@@ -140,7 +146,7 @@ describe('PDF download access', () => {
     expect((await request(app).get(`${api}/admin/requests/${requestId}/pdf`).set(bearer(tok.sam))).status).toBe(403);
     const admin = await request(app).get(`${api}/admin/requests/${requestId}/pdf`).set(bearer(tok.admin));
     expect(admin.status).toBe(200);
-    expect(admin.headers['content-disposition']).toMatch(/attachment; filename="Capex-Request-2026_REQ-\d{6}_\d{8}\.pdf"/);
+    expect(admin.headers['content-disposition']).toMatch(/attachment; filename="Capex-Requ_\d{6}_\d{8}\.pdf"/);
     const detail = (await request(app).get(`${api}/admin/requests/${requestId}`).set(bearer(tok.admin))).body.archive;
     expect(detail).toMatchObject({ status: 'Stored', pdfAvailable: true });
     expect(detail.pdfBytes).toBeGreaterThan(1000);

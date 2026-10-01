@@ -90,7 +90,7 @@ describe("a customer's own file folder", () => {
     const [doc] = await tenantQuery<{ HasContent: number; FilePath: string }>(c.tenantId, 'SELECT CASE WHEN Content IS NULL THEN 0 ELSE 1 END AS HasContent, FilePath FROM RequestDocuments WHERE TenantId = @TenantId AND RequestId = @R', { R: requestId });
     expect(doc.HasContent).toBe(0);
     expect(path.dirname(doc.FilePath)).toBe(day);
-    expect(path.basename(doc.FilePath)).toContain(requestNumber);
+    expect(path.basename(doc.FilePath)).toMatch(new RegExp(`^Order_${requestNumber.replace(/^REQ-/, '')}_\\d{8}\\.pdf$`));
     expect(fs.readFileSync(doc.FilePath).subarray(0, 4).toString()).toBe('%PDF');
 
     const pdf = await binary(request(app).get(`${api}/my/requests/${requestId}/pdf`).set(bearer(c.sam)));

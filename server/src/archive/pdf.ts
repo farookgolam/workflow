@@ -283,9 +283,18 @@ export function buildRequestPdf(d: RequestDetail, auditRows: AuditRow[], brand?:
   return done;
 }
 
-/** [FormName]_[RequestID]_[YYYYMMDD].pdf, or ..._REJECTED_... ; safe as a file name anywhere (no " * : < > ? / \ | # %). */
-export function archiveFileName(d: Pick<RequestDetail, 'formName' | 'requestNumber' | 'status' | 'closedAt'>): string {
-  const form = d.formName.normalize('NFKC').replace(/["*:<>?/\\|#%~&{}]+/g, '').trim().replace(/\s+/g, '-').replace(/^\.+|\.+$/g, '').slice(0, 80) || 'Form';
-  const date = (d.closedAt ?? new Date()).toISOString().slice(0, 10).replace(/-/g, '');
-  return `${form}_${d.requestNumber}_${d.status === 'Rejected' ? 'REJECTED_' : ''}${date}.pdf`;
+/**
+ * The PDF's file name, archived and downloaded alike: [first 10 characters of the form name]_[request number without
+ * "REQ-"]_[submitted date ddmmyyyy].pdf - e.g. Leave-Appl_000207_12122026.pdf. Approved and rejected are named the same.
+ * Safe as a file name anywhere (no " * : < > ? / \ | # %).
+ */
+export function archiveFileName(d: Pick<RequestDetail, 'formName' | 'requestNumber' | 'submittedAt'>): string {
+  // the form name, spaces as '-', cut at exactly FORM_CHARS characters (not at a word: "Leave-Appl", "Leave-Canc")
+  const form = d.formName.normalize('NFKC').replace(/["*:<>?/\\|#%~&{}]+/g, '').trim().replace(/\s+/g, '-').replace(/-+/g, '-')
+    .replace(/^[.-]+/, '').slice(0, FORM_CHARS).replace(/[.-]+$/, '') || 'Form';
+  const seq = d.requestNumber.replace(/^REQ-/i, ''); // REQ-000123 -> 000123
+  const s = new Date(d.submittedAt); // the day it was submitted, server time - the same day as the customer-file day folder
+  const date = `${String(s.getDate()).padStart(2, '0')}${String(s.getMonth() + 1).padStart(2, '0')}${s.getFullYear()}`;
+  return `${form}_${seq}_${date}.pdf`;
 }
+const FORM_CHARS = 10;

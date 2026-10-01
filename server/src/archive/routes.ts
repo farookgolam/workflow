@@ -3,6 +3,7 @@ import { actorFrom, audit } from '../audit/audit';
 import { tenantQuery } from '../db/query';
 import { AppError } from '../http/errors';
 import { idParam } from '../workflow/routes';
+import { archiveFileName } from './pdf';
 import { loadDocument } from './worker';
 
 /**
@@ -11,9 +12,10 @@ import { loadDocument } from './worker';
  */
 async function sendPdf(req: Request, res: Response, requestId: number, onlyFor?: { submitter?: number; approver?: number }): Promise<void> {
   const { tenantId } = req.user!;
-  const [r] = await tenantQuery<{ SubmitterUserId: number; Status: string; Took: number }>(
+  const [r] = await tenantQuery<{ SubmitterUserId: number; Status: string; Took: number; FormName: string; RequestNumber: string; SubmittedAt: Date }>(
     tenantId,
-    `SELECT r.SubmitterUserId, r.Status,
+    `SELECT r.SubmitterUserId, r.Status, r.RequestNumber, r.SubmittedAt,
+            (SELECT f.Name FROM Forms f WHERE f.TenantId = r.TenantId AND f.FormId = r.FormId) AS FormName,
             CASE WHEN EXISTS (SELECT 1 FROM RequestSteps s WHERE s.TenantId = r.TenantId AND s.RequestId = r.RequestId
                                AND @Approver IS NOT NULL AND (s.AssignedUserId = @Approver OR s.DelegateUserId = @Approver OR s.ActedByUserId = @Approver))
                  THEN 1 ELSE 0 END AS Took
@@ -27,7 +29,9 @@ async function sendPdf(req: Request, res: Response, requestId: number, onlyFor?:
 
   await audit(tenantId, actorFrom(req), { action: 'pdf.downloaded', entityType: 'Request', entityId: requestId, requestId });
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="${doc.fileName.replace(/[^\w.-]/g, '_')}"`);
+  // named by today's rule even when the stored PDF is older and was archived under an earlier name
+  const name = archiveFileName({ formName: r.FormName, requestNumber: r.RequestNumber, submittedAt: r.SubmittedAt });
+  res.setHeader('Content-Disposition', `attachment; filename="${name.replace(/[^\w.-]/g, '_')}"`);
   res.setHeader('Cache-Control', 'private, no-store');
   res.end(doc.content);
 }
