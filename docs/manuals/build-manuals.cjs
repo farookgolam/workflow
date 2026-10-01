@@ -159,8 +159,10 @@ function render(manual, outFile, tocPageNumbers) {
     } else if (b.img) {
       picture(b.img, M.left, b.width, b.maxH, b.caption);
     } else if (b.task) {
-      // the title, kept with what follows it
-      ensure(110);
+      // the title, kept with what follows it: the "You need" line and the first step with its picture
+      const first = b.steps?.[0] && (typeof b.steps[0] === 'string' ? { text: b.steps[0] } : b.steps[0]);
+      const firstH = first ? measure(first.text, W - 30, 10.5) + 6 + (first.img ? picSize(first.img, M.left + 28, first.width, first.maxH).h * 0.8 + 20 : 0) : 0;
+      ensure(Math.max(110, 40 + (b.need ? measure(`**You need:** ${b.need}`, W, 10) + 6 : 0) + firstH));
       doc.y += 10;
       headings.push(doc.bufferedPageRange().count);
       doc.font(F.b).fontSize(14).fillColor(C.ink).text(b.task, M.left, doc.y, { width: W });

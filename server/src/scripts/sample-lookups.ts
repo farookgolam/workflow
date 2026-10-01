@@ -42,7 +42,8 @@ async function main() {
   const dir = path.resolve(__dirname, '../../../docs/samples/lookups');
   fs.mkdirSync(dir, { recursive: true });
   const doImport = process.argv.includes('--import');
-  const tenantId = doImport ? await resolveTenantId(null) : 0;
+  const tenantArg = process.argv.indexOf('--tenant');
+  const tenantId = doImport ? await resolveTenantId(null, tenantArg > 0 ? process.argv[tenantArg + 1] : undefined) : 0;
   const [admin] = doImport
     ? await tenantQuery<{ UserId: number }>(tenantId, `SELECT TOP 1 u.UserId FROM Users u JOIN UserRoles r ON r.TenantId = u.TenantId AND r.UserId = u.UserId AND r.Role = 'Admin' WHERE u.TenantId = @TenantId ORDER BY u.UserId`)
     : [];

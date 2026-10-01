@@ -24,11 +24,15 @@ const SIG = { strokes: [[40, 120, 70, 60, 110, 130, 150, 50, 200, 120, 240, 80, 
 // ------------------------------------------------------------------------------------------------
 // API helpers (the demo data)
 // ------------------------------------------------------------------------------------------------
-async function call(method, url, token, body) {
+async function call(method, url, token, body, retry = 2) {
   const res = await fetch(`${API}${url}`, {
     method,
     headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: body ? JSON.stringify(body) : undefined,
+  }).catch(async (e) => { // a kept-alive connection the API has already closed: try again on a new one
+    if (!retry) throw e;
+    await new Promise((r) => setTimeout(r, 500));
+    return call(method, url, token, body, retry - 1).then((json) => ({ ok: true, text: async () => JSON.stringify(json) }));
   });
   const text = await res.text();
   const json = text ? JSON.parse(text) : null;
@@ -44,7 +48,10 @@ async function prepare() {
     await call('POST', '/global/tenants', g, { name: 'Riverside Academy', slug: SLUG, adminEmail: `admin@${SLUG}.test`, adminDisplayName: 'Alex Admin', adminKey: KEY });
     console.log('created Riverside Academy');
   }
-  execFileSync('npm', ['run', '--silent', 'seed:demo', '--', '--slug', SLUG], { cwd: path.join(__dirname, '..', '..', 'server'), stdio: 'inherit', shell: true });
+  const npm = (...args) => execFileSync('npm', ['run', '--silent', ...args], { cwd: path.join(__dirname, '..', '..', 'server'), stdio: 'inherit', shell: true });
+  npm('seed:demo', '--', '--slug', SLUG);
+  npm('sample:lookups', '--', '--import', '--tenant', SLUG); // Schools, Departments, Job descriptions (skipped when there)
+  npm('sample:forms', '--', '--tenant', SLUG); // the five sample forms (left alone when there)
 
   const sam = await login('submitter');
   if ((await call('GET', '/my/requests', sam)).total > 0) return loadIds(sam); // already prepared
@@ -88,12 +95,12 @@ const HIGHLIGHT_CSS = '[data-hl]{outline:3px solid #e11d48 !important;outline-of
 // one browser profile per person, signed in once: the app limits sign-ins per minute, and later pages of the same
 // person reuse the session cookie
 const contexts = new Map();
-async function signedIn(browser, who) {
+async function signedIn(browser, who, width = who === 'admin' ? 1280 : 1100) {
   const known = who && contexts.get(who);
   const ctx = known ?? (await browser.createBrowserContext());
   if (who) contexts.set(who, ctx);
   const page = await ctx.newPage();
-  await page.setViewport({ width: 1100, height: 760, deviceScaleFactor: 2 });
+  await page.setViewport({ width, height: 760, deviceScaleFactor: 2 }); // the admin menu needs 1280 to stay on one line
   if (known) {
     await page.goto(`${SITE}/`, { waitUntil: 'networkidle0' });
     if (!new URL(page.url()).pathname.startsWith('/login')) return page;
@@ -114,6 +121,38 @@ async function go(page, url) {
   await page.goto(`${SITE}${url}`, { waitUntil: 'networkidle0' });
   await page.addStyleTag({ content: HIGHLIGHT_CSS });
 }
+// The global console (http://localhost:5173/global) - its own sign-in, kept in one browser profile. It keeps a
+// request open in the background, so pages are taken as loaded when at most two are still running.
+const CONSOLE = 'http://localhost:5173/global';
+let consoleCtx;
+async function gGo(page, url) {
+  await page.goto(`${CONSOLE}${url}`, { waitUntil: 'networkidle2' });
+  await page.waitForSelector('h1'); await new Promise((r) => setTimeout(r, 500));
+  await page.addStyleTag({ content: HIGHLIGHT_CSS });
+}
+async function console_(browser, signIn = true) {
+  if (!signIn) {
+    const page = await (await browser.createBrowserContext()).newPage();
+    await page.setViewport({ width: 1280, height: 760, deviceScaleFactor: 2 });
+    return page;
+  }
+  const first = !consoleCtx;
+  consoleCtx ??= await browser.createBrowserContext();
+  const page = await consoleCtx.newPage();
+  await page.setViewport({ width: 1280, height: 760, deviceScaleFactor: 2 });
+  if (first) {
+    await gGo(page, '/');
+    await page.type('#email', 'qa-global@demo.test'); await page.type('input[type=password]', KEY); await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.body.textContent.includes('New customer'), { timeout: 30000 }); // signed in
+  }
+  return page;
+}
+async function riverside(browser) {
+  const p = await console_(browser); await gGo(p, '/');
+  await clickText(p, 'a', 'Riverside Academy', 2); await p.waitForSelector('#cname'); await p.addStyleTag({ content: HIGHLIGHT_CSS });
+  return p;
+}
+
 /** Outlines the first element matching `selector` whose text includes `text` (any matching element when no text). */
 async function highlight(page, selector, text) {
   const ok = await page.evaluate((sel, txt) => {
@@ -123,14 +162,14 @@ async function highlight(page, selector, text) {
   }, selector, text ?? null);
   if (!ok) throw new Error(`nothing to highlight: ${selector} "${text}"`);
 }
-async function clickText(page, selector, text) {
+async function clickText(page, selector, text, busy = 0) {
   const ok = await page.evaluate((sel, txt) => {
     const el = [...document.querySelectorAll(sel)].find((e) => e.textContent.includes(txt));
     if (el) el.click();
     return !!el;
   }, selector, text);
   if (!ok) throw new Error(`nothing to click: ${selector} "${text}"`);
-  await page.waitForNetworkIdle();
+  await page.waitForNetworkIdle({ concurrency: busy }); // the global console always has a request open: busy 2
 }
 /** The box around the first `selector` whose text includes `text`, plus a margin - or the whole page area shown. */
 async function clipOf(page, selector, text, pad = 12) {
@@ -286,6 +325,190 @@ const SHOTS = {
     await highlight(p, '#digest-hour'); await save(p, 'user-22-account', await clipOf(p, 'section.card', 'Approval emails'));
     await clickText(p, 'label', 'Email me about each request');
   },
+
+  // ----------------------------------------------------------------------------------------------
+  // The Administrator Manual's screenshots (Alex Admin, at 1280 wide)
+  // ----------------------------------------------------------------------------------------------
+  async 'admin-01-dashboard'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin');
+    await highlight(p, '.tiles'); await save(p, 'admin-01-dashboard', { x: 0, y: 0, width: 1280, height: 560 });
+  },
+  async 'admin-02-help'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin');
+    await clickText(p, 'summary', 'Help'); await highlight(p, '.help-pop a', 'Administrator Manual');
+    await save(p, 'admin-02-help', { x: 680, y: 0, width: 600, height: 230 });
+  },
+  async 'admin-03-requests'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/requests');
+    await highlight(p, '.card.filters'); await save(p, 'admin-03-requests');
+  },
+  async 'admin-04-request-actions'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, `/admin/requests/${ID['REQ-000005']}`);
+    await highlight(p, 'button', 'Send reminder');
+    const top = await clipOf(p, 'section.card', 'Timeline', 0);
+    await save(p, 'admin-04-request-actions', { x: 80, y: 70, width: 1120, height: top.y + 330 - 70 });
+  },
+  async 'admin-05-reassign'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, `/admin/requests/${ID['REQ-000005']}`);
+    await clickText(p, 'button', 'Reassign'); await p.select('select[aria-label="New approver"]', (await p.$$eval('select[aria-label="New approver"] option', (o) => o.find((x) => x.textContent.includes('Dana'))?.value)));
+    await highlight(p, 'label.check', 'As delegate');
+    await save(p, 'admin-05-reassign', await clipOf(p, 'section.card', 'Timeline'));
+  },
+  async 'admin-06-cancel'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, `/admin/requests/${ID['REQ-000005']}`);
+    await clickText(p, 'button', 'Cancel request'); await p.type('section.card textarea', 'Submitted twice - the same order is REQ-000004.');
+    await highlight(p, 'button', 'Confirm cancel');
+    await save(p, 'admin-06-cancel', await clipOf(p, 'section.card', 'Actions'));
+  },
+  async 'admin-07-export'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/requests');
+    await clickText(p, 'button', 'Export PDFs'); await p.addStyleTag({ content: HIGHLIGHT_CSS });
+    const form = await p.$$eval('.filters select option', (o) => o.find((x) => x.textContent === 'Purchase Request')?.value);
+    await p.select('.filters label:first-child select', form);
+    await clickText(p, 'button', 'Check'); await highlight(p, 'button.primary', 'Download ZIP');
+    await save(p, 'admin-07-export', await clipOf(p, 'section.card', 'Download ZIP'));
+  },
+  async 'admin-08-forms'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/forms');
+    await p.type('section.card input', 'Travel Request'); await highlight(p, 'button', 'Create and configure');
+    await save(p, 'admin-08-forms');
+  },
+  async 'admin-09-details'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/forms'); await clickText(p, 'a', 'Purchase Request');
+    await save(p, 'admin-09-details', await clipOf(p, 'section.card', 'Save details'));
+  },
+  async 'admin-10-builder'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/forms'); await clickText(p, 'a', 'Purchase Request');
+    await p.addStyleTag({ content: HIGHLIGHT_CSS }); await highlight(p, '.b-palette');
+    await save(p, 'admin-10-builder', await clipOf(p, 'section.card', 'Save fields'));
+  },
+  async 'admin-11-properties'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/forms'); await clickText(p, 'a', 'Purchase Request');
+    await p.addStyleTag({ content: HIGHLIGHT_CSS });
+    await (await p.$$('.b-item'))[2].click(); await new Promise((r) => setTimeout(r, 300));
+    await highlight(p, '.b-side');
+    await save(p, 'admin-11-properties', await clipOf(p, 'section.card', 'Save fields'));
+  },
+  async 'admin-12-calculated'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/forms'); await clickText(p, 'a', 'Mileage Reimbursement');
+    await p.addStyleTag({ content: HIGHLIGHT_CSS });
+    const items = await p.$$('.b-item'); for (const it of items) if ((await it.evaluate((e) => e.textContent)).includes('Total claim')) { await it.click(); break; }
+    await new Promise((r) => setTimeout(r, 300)); await highlight(p, '.b-side textarea, .b-side input.mono, .b-side [id*=formula]');
+    await save(p, 'admin-12-calculated', await clipOf(p, 'section.card', 'Save fields'));
+  },
+  async 'admin-13-grid'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/forms'); await clickText(p, 'a', 'Mileage Reimbursement');
+    await p.addStyleTag({ content: HIGHLIGHT_CSS });
+    const items = await p.$$('.b-item'); for (const it of items) if ((await it.evaluate((e) => !!e.querySelector('.gridf')))) { await it.click(); break; }
+    await new Promise((r) => setTimeout(r, 300)); await highlight(p, '.b-side');
+    await save(p, 'admin-13-grid', await clipOf(p, 'section.card', 'Save fields'));
+  },
+  async 'admin-14-chain'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/forms'); await clickText(p, 'a', 'Mileage Reimbursement');
+    await p.addStyleTag({ content: HIGHLIGHT_CSS }); await highlight(p, 'fieldset', 'Who approves this step');
+    await save(p, 'admin-14-chain', await clipOf(p, '.step-def'));
+  },
+  async 'admin-15-publish'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/forms'); await clickText(p, 'a', 'Mileage Reimbursement');
+    await p.addStyleTag({ content: HIGHLIGHT_CSS }); await highlight(p, 'button', 'Publish chain');
+    const c = await clipOf(p, 'button', 'Publish chain', 0);
+    await save(p, 'admin-15-publish', { x: 80, y: c.y - 420, width: 1120, height: 480 });
+  },
+  async 'admin-16-chain-preview'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/forms'); await clickText(p, 'a', 'Purchase Request');
+    await p.addStyleTag({ content: HIGHLIGHT_CSS });
+    await p.evaluate(() => [...document.querySelectorAll('section.card')].find((s) => s.textContent.includes('Approval chain')).querySelectorAll('.seg button')[1].click());
+    await p.waitForNetworkIdle();
+    await save(p, 'admin-16-chain-preview', await clipOf(p, 'section.card', 'Approval chain'));
+  },
+  async 'admin-17-lookups'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/lookups');
+    await highlight(p, '.file-btn'); await save(p, 'admin-17-lookups');
+  },
+  async 'admin-18-lookup-rows'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/lookups');
+    await clickText(p, 'button', 'Schools'); await p.addStyleTag({ content: HIGHLIGHT_CSS });
+    await highlight(p, 'button', 'Edit');
+    await save(p, 'admin-18-lookup-rows', await clipOf(p, 'section.card', 'Find'));
+  },
+  async 'admin-19-users'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/users');
+    await highlight(p, 'tr', 'Maria Manager'); await save(p, 'admin-19-users', await clipOf(p, 'section.card', 'Joined'));
+  },
+  async 'admin-20-add-person'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/users');
+    const inputs = await p.$$('fieldset input[type=email], fieldset input[type=text], fieldset input:not([type])'); // email, name
+    await inputs[0].type(`jo.teacher@${SLUG}.test`); await inputs[1].type('Jo Teacher');
+    await clickText(p, 'fieldset label', 'Approver');
+    await highlight(p, 'button', 'Add person'); await save(p, 'admin-20-add-person', await clipOf(p, 'section.card', 'Add people'));
+  },
+  async 'admin-21-report'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/reports');
+    await p.waitForFunction(() => [...document.querySelectorAll('#newForm option')].some((o) => o.textContent.includes('Purchase Request')));
+    const form = await p.$$eval('#newForm option', (o) => o.find((x) => x.textContent.includes('Purchase Request'))?.value);
+    await p.select('#newForm', form); await p.waitForNetworkIdle();
+    await clickText(p, 'button', 'Run report'); await p.addStyleTag({ content: HIGHLIGHT_CSS });
+    await highlight(p, 'button', 'Export to Excel');
+    await save(p, 'admin-21-report', await clipOf(p, 'section.card', 'Export to Excel'));
+    const result = await clipOf(p, 'section.card', 'REQ-000001');
+    await save(p, 'admin-24-report-result', { ...result, height: Math.min(result.height, 520) });
+  },
+  async 'admin-22-audit'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/audit');
+    await highlight(p, 'button', 'Export CSV'); await save(p, 'admin-22-audit');
+  },
+  // ----------------------------------------------------------------------------------------------
+  // The Global Administrator Manual's screenshots (the local test global admin, in the console at /global)
+  // ----------------------------------------------------------------------------------------------
+  async 'global-01-sign-in'(b) {
+    const p = await console_(b, false); await gGo(p, '/');
+    await p.type('#email', 'qa-global@demo.test'); await highlight(p, 'input[type=password]'); await save(p, 'global-01-sign-in');
+  },
+  async 'global-02-customers'(b) {
+    const p = await console_(b); await gGo(p, '/');
+    await highlight(p, 'button', 'New customer'); await save(p, 'global-02-customers', { x: 0, y: 0, width: 1280, height: 400 });
+  },
+  async 'global-03-new-customer'(b) {
+    const p = await console_(b); await gGo(p, '/');
+    await clickText(p, 'button', 'New customer', 2); await p.addStyleTag({ content: HIGHLIGHT_CSS });
+    await p.type('#name', 'Lakeside College'); await p.type('#adminEmail', 'it.manager@lakeside.test'); await p.type('#adminName', 'Lee Jordan');
+    await highlight(p, 'button.primary', 'Create'); await save(p, 'global-03-new-customer', await clipOf(p, 'section.card', 'New customer'));
+  },
+  async 'global-04-address'(b) {
+    const p = await riverside(b);
+    await highlight(p, 'button.link', 'Suspend this customer'); await save(p, 'global-04-address', await clipOf(p, 'section.card', 'Address and status'));
+  },
+  async 'global-05-file-storage'(b) {
+    const p = await riverside(b);
+    await p.type('#cfolder', 'D:\\CustomerFiles\\Riverside'); await highlight(p, 'button', 'Use this folder');
+    await save(p, 'global-05-file-storage', await clipOf(p, 'section.card', 'File storage'));
+  },
+  async 'global-06-administrators'(b) {
+    const p = await riverside(b);
+    await p.type('#grant', `bursar@${SLUG}.test`); await p.type('#grant-name', 'Bea Bursar'); await highlight(p, 'button', 'Add administrator');
+    await save(p, 'global-06-administrators', await clipOf(p, 'section.card', 'Add an administrator'));
+  },
+  async 'global-07-export'(b) {
+    const p = await riverside(b);
+    const form = await p.$$eval('.filters select option', (o) => o.find((x) => x.textContent === 'Purchase Request')?.value);
+    await p.select('.filters label:first-child select', form);
+    await clickText(p, 'button', 'Check', 2); await highlight(p, 'button.primary', 'Download ZIP');
+    await save(p, 'global-07-export', await clipOf(p, 'section.card', 'Download ZIP'));
+  },
+  async 'global-08-support'(b) {
+    const p = await riverside(b);
+    await p.type('#reason', 'Ticket 4821 - form will not publish'); await highlight(p, 'button', 'Start support session');
+    await save(p, 'global-08-support', await clipOf(p, 'section.card', 'Support access'));
+  },
+  async 'global-09-admins'(b) {
+    const p = await console_(b); await gGo(p, '/administrators');
+    await highlight(p, 'button', 'New global administrator'); await save(p, 'global-09-admins');
+  },
+
+  async 'admin-23-settings'(b) {
+    const p = await signedIn(b, 'admin'); await go(p, '/admin/settings');
+    await save(p, 'admin-23-settings', await clipOf(p, 'section.card', 'Branding'));
+  },
 };
 
 (async () => {
@@ -298,6 +521,7 @@ const SHOTS = {
     for (const [name, shot] of Object.entries(SHOTS)) {
       if (wanted.length && !wanted.some((w) => name.startsWith(w))) continue;
       await shot(browser);
+      for (const ctx of browser.browserContexts()) for (const pg of await ctx.pages()) await pg.close(); // sessions stay in the context
     }
   } finally {
     await browser.close();
