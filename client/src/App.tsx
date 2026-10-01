@@ -1,9 +1,10 @@
-import type { MouseEvent, ReactNode } from 'react';
+import { useCallback, useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, NavLink, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { RequireAuth, useAuth } from './auth';
 import { PRODUCT, useSite } from './site';
 import { api as apiClient } from './api';
 import { openManual } from './manuals';
+import { AboutDialog, type AboutBasics } from './about';
 import { ThemeToggle } from './theme';
 import { ApprovalPage, ApproveLinkPage } from './pages/Approval';
 import { LoginScreen } from './pages/Login';
@@ -61,22 +62,30 @@ function Shell() {
   );
 }
 
-/** Opens a PDF in a new tab: the User Manual and the workflow sheet for everyone, and the Administrator Manual too for administrators. */
+/** Opens a PDF in a new tab: the User Manual and the workflow sheet for everyone, and the Administrator Manual too for administrators. Also About. */
 function HelpLink({ admin }: { admin: boolean }) {
   const open = (manual: 'user' | 'admin' | 'workflow') => (e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
     (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open');
     void openManual(() => apiClient<{ url: string }>('/help/link', { method: 'POST', body: { manual } }));
   };
+  const [about, setAbout] = useState(false);
+  const loadAbout = useCallback(() => apiClient<AboutBasics>('/about'), []);
   return (
-    <details className="help-menu">
-      <summary>Help</summary>
-      <div className="help-pop">
-        {admin && <a href="#help" onClick={open('admin')}>Administrator Manual</a>}
-        <a href="#help" onClick={open('user')}>User Manual</a>
-        <a href="#help" onClick={open('workflow')}>How a request works (workflow)</a>
-      </div>
-    </details>
+    <>
+      <details className="help-menu">
+        <summary>Help</summary>
+        <div className="help-pop">
+          {admin && <a href="#help" onClick={open('admin')}>Administrator Manual</a>}
+          <a href="#help" onClick={open('user')}>User Manual</a>
+          <a href="#help" onClick={open('workflow')}>How a request works (workflow)</a>
+          <span className="help-sep" />
+          <a href="#about" onClick={(e) => { e.preventDefault(); (e.currentTarget.closest('details') as HTMLDetailsElement | null)?.removeAttribute('open'); setAbout(true); }}>About FileBank WorkFlow</a>
+        </div>
+      </details>
+      {/* outside the menu: a closed <details> hides everything in it */}
+      {about && <AboutDialog load={loadAbout} onClose={() => setAbout(false)} />}
+    </>
   );
 }
 

@@ -23,9 +23,11 @@ doc.pipe(fs.createWriteStream(OUT));
 const W = doc.page.width; // 792
 const H = doc.page.height; // 612
 const M = 36;
+const LOGO = path.join(__dirname, 'filebank-logo.png'); // top right of both pages
 
 // ---- header ----
 doc.rect(0, 0, W, 6).fill(C.yellow);
+doc.image(LOGO, W - M - 80, 16, { height: 33 });
 doc.font(FONT.b).fontSize(20).fillColor(C.ink).text('FileBank WorkFlow  |  Request workflow', M, 26);
 doc.font(FONT.r).fontSize(10).fillColor(C.muted)
   .text('How a request moves from submission to a final, signed and archived decision.', M, 51);
@@ -168,6 +170,7 @@ cols.forEach((c, i) => {
 // =====================================================================================
 doc.addPage({ size: 'LETTER', layout: 'landscape', margin: 0 });
 doc.rect(0, 0, W, 6).fill(C.yellow);
+doc.image(LOGO, W - M - 80, 16, { height: 33 });
 doc.font(FONT.b).fontSize(20).fillColor(C.ink).text('Step by step', M, 26);
 doc.font(FONT.r).fontSize(10).fillColor(C.muted)
   .text('Each number matches a box on the workflow diagram (page 1).', M, 51);

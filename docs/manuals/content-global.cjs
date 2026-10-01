@@ -30,6 +30,16 @@ module.exports = {
         "Five wrong keys lock the account for 15 minutes.",
         "**Help** (top right) opens this manual; a copied link to it stops working after a few minutes.",
       ] },
+    { task: "See what the installation runs on",
+      steps: [
+        { text: "Choose **About** in the top bar. The page shows what customers see under Help > About - the **version**, when it was **last updated** (installed) and FileBank's contact details - and below it the **Server** (Windows, computer name, Node.js, running since) and the **Database** (SQL Server version and edition, database name, latest migration).", img: "screens/global-10-about.jpg", maxH: 300 },
+        "Further down, **Software used to build the application** lists every library with the version installed on this server, what it is used for and its licence.",
+      ],
+      result: "Use it to confirm an update went in (the version and date), and to answer questions about versions and licences.",
+      trouble: [
+        "\"Last updated\" comes from DEPLOYED.txt, which scripts/azure-vm-update.ps1 writes at each update. A copy installed another way shows **development** and the date the server code changed.",
+        "Customers see only the version, date and contact details - never the server, database or library versions, which would help an attacker.",
+      ] },
     { task: "Create the very first global administrator",
       need: "access to the server - there is nobody yet who could do it in the console.",
       steps: [

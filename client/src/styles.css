@@ -449,3 +449,15 @@ nav.seg a.on { background: var(--yellow); color: var(--ink); font-weight: 600; }
   background: var(--bar); color: var(--bar-text); box-shadow: 0 4px 16px rgb(8 8 3 / .25);
 }
 .update-banner button { white-space: nowrap; }
+
+/* ---- About FileBank WorkFlow (about.tsx) ---- */
+dialog.about { width: min(30rem, calc(100vw - 2rem)); padding: 1.5rem 1.75rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: 0 12px 40px rgb(0 0 0 / .25); }
+dialog.about::backdrop { background: rgb(0 0 0 / .45); }
+dialog.about h2 { margin: .75rem 0 1rem; }
+.about-logo { height: 56px; width: auto; display: block; }
+.about-table { width: 100%; border-collapse: collapse; }
+.about-table th { text-align: left; font-weight: 600; color: var(--muted); padding: .45rem 1rem .45rem 0; white-space: nowrap; vertical-align: top; width: 1%; }
+.about-table td { padding: .45rem 0; overflow-wrap: anywhere; }
+.about-table th, .about-table td { border-bottom: 0; }
+.about-table tr + tr th, .about-table tr + tr td { border-top: 1px solid var(--border); }
+.help-pop .help-sep { border-top: 1px solid var(--border); margin: .3rem 0; }

@@ -26,6 +26,7 @@ import { adminLookupsRouter } from './lookups/routes';
 import { adminReportsRouter } from './reports/routes';
 import { siteRouter } from './site.routes';
 import { globalHelpRouter, helpRouter } from './help/routes';
+import { aboutRouter, globalAboutRouter } from './about/routes';
 
 export function createApp() {
   const app = express();
@@ -65,6 +66,7 @@ export function createApp() {
   api.use('/auth', authRouter);
   // the PDF manuals: each route checks its own sign-in (a customer's, a global administrator's, or a short-lived link)
   api.use('/help', helpRouter);
+  api.use('/about', aboutRouter); // name, version, last update, contact (each route checks its own sign-in)
   // The global management site: creating and managing customers. Its own identity, its own
   // JWT audience - a customer's token can never reach these routes, or the other way round.
   api.use('/global/auth', platformAuthRouter);
@@ -72,6 +74,7 @@ export function createApp() {
   api.use('/global/stats', requirePlatformAdmin, platformStatsRouter);
   api.use('/global/admins', requirePlatformAdmin, platformAdminsRouter);
   api.use('/global/help', globalHelpRouter);
+  api.use('/global/about', globalAboutRouter);
   api.use('/admin', requireAuth, requireRole('Admin'));
   api.use('/admin/dashboard', dashboardRouter);
   api.use('/admin/audit', auditRouter);

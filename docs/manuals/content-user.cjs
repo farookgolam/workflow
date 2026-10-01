@@ -54,6 +54,12 @@ module.exports = {
         { text: "Your **home page** shows what you can do: **Start a new request** (the forms you can fill in), **My submissions** (your requests) and, for approvers, **Waiting for my approval**.", img: "screens/user-04-home.jpg" },
         { text: "Top right: **Help** opens the manuals and the workflow sheet; the small screen icon switches **light / dark** colours; **your name** opens your account (password key and approval emails).", img: "screens/user-05-help.jpg", width: 0.7 },
       ] },
+    { task: "See the version, or contact FileBank",
+      steps: [
+        { text: "Choose **Help** at the top right, then **About FileBank WorkFlow**.", img: "screens/user-23-about-menu.jpg", width: 0.6 },
+        { text: "The window shows the application's **version**, when it was **last updated**, and how to reach FileBank: **filebankinc.com** and **973-279-4411** (both can be clicked; on a phone the number calls). Choose **Close**.", img: "screens/user-24-about.jpg", width: 0.55 },
+      ],
+      result: "Mention the version when you report a problem - it tells support exactly what you are using." },
     { task: "Change your password key",
       steps: [
         "Click **your name** at the top right.",

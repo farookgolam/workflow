@@ -48,6 +48,11 @@ module.exports = {
       ],
       result: "The manual opens in a new tab, where it can be searched, saved or printed. It is always the version that matches the system.",
       trouble: "A copied link to a manual stops working after a few minutes - open it again from **Help**." },
+    { task: "See the version, or contact FileBank",
+      steps: [
+        { text: "Choose **Help**, then **About FileBank WorkFlow**. The window shows the **version**, when the system was **last updated**, and FileBank's contact details: **filebankinc.com**, telephone **973-279-4411**.", img: "screens/user-24-about.jpg", width: 0.55 },
+      ],
+      result: "\"Last updated\" is when your provider last installed a new version - handy when people notice something new or changed." },
     { h2: "Light or dark colours, and updates" },
     { ul: [
       "The small screen icon next to **Help** switches between **System** (follow the computer), **Light** and **Dark**. It is each person's own choice.",

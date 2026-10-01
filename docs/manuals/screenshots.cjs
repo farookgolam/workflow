@@ -500,6 +500,17 @@ const SHOTS = {
     await p.type('#reason', 'Ticket 4821 - form will not publish'); await highlight(p, 'button', 'Start support session');
     await save(p, 'global-08-support', await clipOf(p, 'section.card', 'Support access'));
   },
+  async 'global-10-about'(b) {
+    const p = await console_(b); await gGo(p, '/about');
+    await p.waitForSelector('.about-table'); await save(p, 'global-10-about', { x: 0, y: 0, width: 1280, height: 1100 });
+  },
+  async 'user-23-about'(b) {
+    const p = await signedIn(b, 'submitter'); await go(p, '/');
+    await clickText(p, 'summary', 'Help'); await highlight(p, '.help-pop a', 'About');
+    await save(p, 'user-23-about-menu', { x: 500, y: 0, width: 600, height: 260 });
+    await clickText(p, '.help-pop a', 'About'); await p.waitForSelector('dialog.about .about-table');
+    await save(p, 'user-24-about', await clipOf(p, 'dialog.about', null, 16));
+  },
   async 'global-09-admins'(b) {
     const p = await console_(b); await gGo(p, '/administrators');
     await highlight(p, 'button', 'New global administrator'); await save(p, 'global-09-admins');
