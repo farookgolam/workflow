@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { SettingsForm, type TenantSettings } from '../../pages/admin/Settings';
-import { gapi, type TenantAdmin, type TenantSummary } from '../api';
+import { PdfExport, exportParams } from '../../pdfExport';
+import { gapi, gdownload, type TenantAdmin, type TenantSummary } from '../api';
 import { useGlobalAction, useGlobalLoad } from '../hooks';
 
 const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '—');
@@ -84,6 +85,19 @@ function Admins({ tenantId, admins, reload }: { tenantId: number; admins: Tenant
         <button disabled={act.busy || !email.trim()} onClick={() => void grant()}>Add administrator</button>
       </div>
     </section>
+  );
+}
+
+/** The customer's PDFs for one form and date range, as a ZIP with Index.xlsx - the same export its administrators have. */
+function CustomerExport({ tenantId }: { tenantId: number }) {
+  const forms = useGlobalLoad<{ forms: { formId: number; name: string; deleted: boolean }[] }>(`/tenants/${tenantId}/forms`);
+  if (!forms.data) return null;
+  return (
+    <PdfExport
+      forms={forms.data.forms}
+      preview={(q) => gapi(`/tenants/${tenantId}/exports/pdfs/preview?${exportParams(q)}`)}
+      download={(q, name) => gdownload(`/tenants/${tenantId}/exports/pdfs?${exportParams(q)}`, name)}
+    />
   );
 }
 
@@ -324,6 +338,7 @@ export function CustomerDetail() {
           <Identity tenant={tenant} reload={detail.reload} />
           <FileStorage tenant={tenant} reload={detail.reload} />
           <Admins tenantId={tenantId} admins={admins} reload={detail.reload} />
+          <CustomerExport tenantId={tenantId} />
           <SupportAccess tenant={tenant} />
           <RemoveCustomer tenant={tenant} />
         </>

@@ -5,6 +5,7 @@ import { AttachmentList, type Attachment } from '../../attachments';
 import { StatusBadge, ValueList, fmtDateTime, type FieldValue } from '../../fields';
 import { useAction, useLoad, type FormRow, type UserRow } from '../../hooks';
 import { ChangeList, type SendBack } from '../../sendback';
+import { PdfExport, exportParams } from '../../pdfExport';
 import { SignatureImage } from '../../sigpad';
 
 /** What each archive state means, for the request page. */
@@ -23,6 +24,7 @@ export function AdminRequests() {
   const query = new URLSearchParams([...params].filter(([, v]) => v));
   const { data, error } = useLoad<{ total: number; page: number; pageSize: number; requests: Row[] }>(`/admin/requests?${query}`);
   const [q, setQ] = useState(params.get('q') ?? '');
+  const [exporting, setExporting] = useState(false);
 
   const set = (key: string, value: string) => {
     const next = new URLSearchParams(params);
@@ -35,7 +37,18 @@ export function AdminRequests() {
 
   return (
     <div className="stack">
-      <h1>Requests</h1>
+      <div className="prev-head">
+        <h1 style={{ margin: 0 }}>Requests</h1>
+        {!exporting && <button onClick={() => setExporting(true)}>Export PDFs…</button>}
+      </div>
+      {exporting && (
+        <PdfExport
+          forms={forms}
+          preview={(q) => api(`/admin/exports/pdfs/preview?${exportParams(q)}`)}
+          download={(q, name) => download(`/admin/exports/pdfs?${exportParams(q)}`, name)}
+          onClose={() => setExporting(false)}
+        />
+      )}
       <form className="card filters" onSubmit={(e) => { e.preventDefault(); set('q', q.trim()); }}>
         <label>Search<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Number, submitter or content" /></label>
         <label>Form<select value={params.get('formId') ?? ''} onChange={(e) => set('formId', e.target.value)}><option value="">All</option>{forms.map((f) => <option key={f.formId} value={f.formId}>{f.name}</option>)}</select></label>

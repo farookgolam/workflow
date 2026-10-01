@@ -85,6 +85,8 @@ module.exports = {
       ['Reset key', 'Forgets that person password key. At their next sign-in they prove their email address with a code and choose a new key. You never see either key.'],
     ] } },
     { note: 'Leaving an organisation with no administrator at all locks its own people out of their configuration - they would need you to grant the role again. Check the list before removing the last one.' },
+    { h2: 'Export PDFs' },
+    { p: 'The **Export PDFs** box on a customer\'s page downloads that customer\'s PDFs for one **form**, a range of **submitted** dates and an **outcome** (approved, rejected or both) as one ZIP: every PDF under its usual name plus **Index.xlsx**, one row per PDF with a link to it, the request\'s details, its approval steps and the form\'s own fields. **Check** first shows how many PDFs match and the ZIP\'s name; **Download ZIP** then makes it. At most **500 PDFs** at a time - narrow the dates for more. It is exactly what the customer\'s own administrators get under Requests > Export PDFs, and each export is recorded in the console\'s audit log (**tenant.pdfs_exported**) and in the customer\'s (**pdf.exported**, with your email as changedBy).' },
     { h2: 'File storage' },
     { p: 'By default a customer\'s closed-request PDFs and its approvers\' documents are kept in the database. Under **File storage** you can give it a folder of its own instead: type the path in **Folder for this customer\'s files** and choose **Use this folder**.' },
     { ul: [

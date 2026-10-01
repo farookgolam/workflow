@@ -18,6 +18,8 @@ import { createUser, normalizeEmail, queueAccountCreatedEmail } from '../users/s
 import { forgetTenant, tenantBaseUrl } from '../tenant';
 import { platformAudit } from './identity';
 import { checkFileRoot } from '../customer-files/files';
+import { exportQuery, previewExport } from '../archive/export';
+import { sendExport } from '../archive/export.routes';
 import { hostSchema, provisionTenant, slugSchema } from './provision';
 
 export const platformTenantsRouter = Router();
@@ -344,6 +346,37 @@ platformTenantsRouter.post('/:tenantId/admins/:userId/reset-key', async (req, re
   await platformAudit(req, me.platformAdminId, { action: 'tenant.admin_key_reset', entityType: 'User', entityId: userId, tenantId });
   await audit(tenantId, systemActor, { action: 'user.key_reset', entityType: 'User', entityId: userId, detail: { changedBy: me.email } });
   res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------------------
+// Exporting a customer's PDFs (one form, a range of submitted dates) - the same export its own administrators have.
+// ---------------------------------------------------------------------------------------
+platformTenantsRouter.get('/:tenantId/forms', async (req, res) => {
+  const tenantId = Number(req.params.tenantId);
+  await loadOr404(tenantId);
+  const forms = await tenantQuery<{ FormId: number; Name: string; Deleted: number }>(
+    tenantId,
+    'SELECT FormId, Name, CASE WHEN DeletedAt IS NULL THEN 0 ELSE 1 END AS Deleted FROM Forms WHERE TenantId = @TenantId ORDER BY Name',
+  );
+  res.json({ forms: forms.map((f) => ({ formId: f.FormId, name: f.Name, deleted: f.Deleted === 1 })) });
+});
+
+platformTenantsRouter.get('/:tenantId/exports/pdfs/preview', async (req, res) => {
+  const tenantId = Number(req.params.tenantId);
+  await loadOr404(tenantId);
+  res.json(await previewExport(tenantId, exportQuery.parse(req.query)));
+});
+
+platformTenantsRouter.get('/:tenantId/exports/pdfs', async (req, res) => {
+  const tenantId = Number(req.params.tenantId);
+  const me = req.platformAdmin!;
+  await loadOr404(tenantId);
+  const q = exportQuery.parse(req.query);
+  const count = await sendExport(res, tenantId, q);
+  if (!count) return;
+  await platformAudit(req, me.platformAdminId, { action: 'tenant.pdfs_exported', entityType: 'Form', entityId: q.formId, tenantId, detail: { ...q, files: count } });
+  // the customer's own audit log records it too, so nothing done from outside is invisible inside
+  await audit(tenantId, systemActor, { action: 'pdf.exported', entityType: 'Form', entityId: q.formId, detail: { ...q, files: count, changedBy: me.email } });
 });
 
 // ---------------------------------------------------------------------------------------

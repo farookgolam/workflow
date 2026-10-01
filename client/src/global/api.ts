@@ -39,6 +39,23 @@ async function raw(path: string, init: { method?: string; body?: unknown }): Pro
   });
 }
 
+/** Saves a file the server sends (e.g. a customer's PDF export), under the name it gives in Content-Disposition. */
+export async function gdownload(path: string, fallbackName: string): Promise<void> {
+  let res = await raw(path, {});
+  if (res.status === 401 && (await refreshSession())) res = await raw(path, {});
+  if (!res.ok) {
+    const e = (await res.json().catch(() => null))?.error;
+    throw new ApiError(res.status, e?.code ?? 'error', e?.message ?? 'Download failed', e?.details ?? []);
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 export async function gapi<T = unknown>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   let res = await raw(path, init);
   if (res.status === 401 && !path.startsWith('/auth/')) {

@@ -8,6 +8,7 @@ import { adminFormsRouter, adminRequestsRouter } from './admin/forms.routes';
 import { adminNotificationsRouter, adminRequestListRouter, auditRouter, dashboardRouter } from './admin/portal.routes';
 import { adminSettingsRouter } from './admin/settings.routes';
 import { adminUsersRouter } from './admin/users.routes';
+import { adminExportRouter } from './archive/export.routes';
 import { adminArchiveRouter, approverPdfRouter, myPdfRouter } from './archive/routes';
 import { adminAttachmentsRouter, approverAttachmentsRouter } from './attachments/routes';
 import { approvalsRouter, formsRouter, myRouter } from './workflow/routes';
@@ -83,6 +84,7 @@ export function createApp() {
   api.use('/admin/requests', adminAttachmentsRouter);
   api.use('/admin/requests', adminRequestsRouter);
   api.use('/admin/requests', adminArchiveRouter);
+  api.use('/admin/exports', adminExportRouter);
   api.use('/admin/requests', adminRequestListRouter);
   api.use('/forms', requireAuth, formsRouter);
   api.use('/my', requireAuth, myRouter, myPdfRouter);

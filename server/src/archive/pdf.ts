@@ -289,12 +289,16 @@ export function buildRequestPdf(d: RequestDetail, auditRows: AuditRow[], brand?:
  * Safe as a file name anywhere (no " * : < > ? / \ | # %).
  */
 export function archiveFileName(d: Pick<RequestDetail, 'formName' | 'requestNumber' | 'submittedAt'>): string {
-  // the form name, spaces as '-', cut at exactly FORM_CHARS characters (not at a word: "Leave-Appl", "Leave-Canc")
-  const form = d.formName.normalize('NFKC').replace(/["*:<>?/\\|#%~&{}]+/g, '').trim().replace(/\s+/g, '-').replace(/-+/g, '-')
-    .replace(/^[.-]+/, '').slice(0, FORM_CHARS).replace(/[.-]+$/, '') || 'Form';
+  const form = fileFormPart(d.formName);
   const seq = d.requestNumber.replace(/^REQ-/i, ''); // REQ-000123 -> 000123
   const s = new Date(d.submittedAt); // the day it was submitted, server time - the same day as the customer-file day folder
   const date = `${String(s.getDate()).padStart(2, '0')}${String(s.getMonth() + 1).padStart(2, '0')}${s.getFullYear()}`;
   return `${form}_${seq}_${date}.pdf`;
 }
 const FORM_CHARS = 10;
+
+/** The form name as file names start: spaces as '-', unsafe characters dropped, cut at exactly 10 characters ("Leave-Appl"). */
+export function fileFormPart(formName: string): string {
+  return formName.normalize('NFKC').replace(/["*:<>?/\\|#%~&{}]+/g, '').trim().replace(/\s+/g, '-').replace(/-+/g, '-')
+    .replace(/^[.-]+/, '').slice(0, FORM_CHARS).replace(/[.-]+$/, '') || 'Form';
+}
