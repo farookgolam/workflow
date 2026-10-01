@@ -1,7 +1,7 @@
 import type { MouseEvent, ReactNode } from 'react';
 import { Link, NavLink, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { RequireAuth, useAuth } from './auth';
-import { useSite } from './site';
+import { PRODUCT, useSite } from './site';
 import { api as apiClient } from './api';
 import { openManual } from './manuals';
 import { ThemeToggle } from './theme';
@@ -32,7 +32,7 @@ function Shell() {
       <header className="topbar">
         <Link to="/" className="brand">
           {site?.logoDataUrl && <img src={site.logoDataUrl} alt="" style={{ height: 24, verticalAlign: 'middle', marginRight: 8 }} />}
-          {site?.name ?? 'Approvals'}
+          {site?.name ?? PRODUCT}
         </Link>
         {user?.roles.includes('Admin') && (
           <nav className="nav" aria-label="Administration">

@@ -63,7 +63,7 @@ export function buildRequestPdf(d: RequestDetail, auditRows: AuditRow[], brand?:
     margins: M,
     bufferPages: true,
     compress: !config.isTest,
-    info: { Title: `${banner} - ${d.formName} ${d.requestNumber}`, Author: 'Approvals', Subject: `${d.formName} approval record`, CreationDate: d.closedAt ?? new Date() },
+    info: { Title: `${banner} - ${d.formName} ${d.requestNumber}`, Author: 'FileBank WorkFlow', Subject: `${d.formName} approval record`, CreationDate: d.closedAt ?? new Date() },
   });
   const chunks: Buffer[] = [];
   doc.on('data', (c: Buffer) => chunks.push(c));

@@ -1,6 +1,6 @@
 // Builds the PDF manuals from the content files in this folder.
 //   node docs/manuals/build-manuals.cjs            (the three in-app manuals)
-//   node docs/manuals/build-manuals.cjs release    (only content-release.cjs: the release process guide)
+//   node docs/manuals/build-manuals.cjs release    (only content-release.cjs: the release process guide; any content-<name>.cjs the same way)
 // Uses the pdfkit already installed for the server. Text supports **bold**. Block types:
 //   h1 (starts a new page, appears in the contents), h2, p, ul, ol, note {kind: note|important|tip}, table {head, rows, widths}
 const fs = require('node:fs');
@@ -15,7 +15,7 @@ const C = { ink: '#111827', muted: '#5b6472', rule: '#d9dde3', soft: '#f3f4f6', 
 const M = { left: 60, right: 60, top: 78, bottom: 66 };
 
 function render(manual, outFile, tocPageNumbers) {
-  const doc = new PDFDocument({ size: 'A4', margins: M, bufferPages: true, info: { Title: manual.title, Author: 'ApprovalFlow', Subject: manual.subtitle } });
+  const doc = new PDFDocument({ size: 'A4', margins: M, bufferPages: true, info: { Title: manual.title, Author: manual.brand ?? 'FileBank WorkFlow', Subject: manual.subtitle } });
   const stream = fs.createWriteStream(outFile);
   doc.pipe(stream);
   const W = doc.page.width - M.left - M.right;
@@ -42,7 +42,7 @@ function render(manual, outFile, tocPageNumbers) {
 
   // ---- cover ----
   doc.rect(0, 0, doc.page.width, 300).fill(C.accent);
-  doc.fillColor('#ffffff').font(F.r).fontSize(13).text('ApprovalFlow', M.left, 120, { characterSpacing: 1.5 });
+  doc.fillColor('#ffffff').font(F.r).fontSize(13).text(manual.brand ?? 'FileBank WorkFlow', M.left, 120, { characterSpacing: 1.5 });
   doc.font(F.b).fontSize(34).text(manual.title, M.left, 150, { width: W });
   doc.font(F.r).fontSize(14).text(manual.subtitle, M.left, doc.y + 8, { width: W });
   doc.fillColor(C.ink).font(F.r).fontSize(11).text(manual.audience, M.left, 340, { width: W, lineGap: 3 });
@@ -139,7 +139,7 @@ function render(manual, outFile, tocPageNumbers) {
     doc.switchToPage(i);
     doc.page.margins.bottom = 0;
     doc.font(F.r).fontSize(8.5).fillColor(C.muted);
-    doc.text(`ApprovalFlow  ·  ${manual.title}`, M.left, 40, { width: W, lineBreak: false });
+    doc.text(`${manual.brand ?? 'FileBank WorkFlow'}  ·  ${manual.title}`, M.left, 40, { width: W, lineBreak: false });
     doc.moveTo(M.left, 56).lineTo(M.left + W, 56).lineWidth(0.5).strokeColor(C.rule).stroke();
     doc.text(`Page ${i + 1} of ${range.count}`, M.left, doc.page.height - 44, { width: W, align: 'center', lineBreak: false });
   }

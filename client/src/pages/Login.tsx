@@ -3,7 +3,7 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError, forgotKey, startSignIn, type StartResult } from '../api';
 import { safeNext, useAuth } from '../auth';
 import { AuthLayout } from '../authLayout';
-import { useSite } from '../site';
+import { PRODUCT, useSite } from '../site';
 
 /** 6 boxes' worth of digits in one field: numeric keypad on phones, masked for the password key. */
 function DigitsInput(props: { id: string; value: string; onChange(v: string): void; masked?: boolean; autoFocus?: boolean; autoComplete?: string; invalid?: boolean }) {
@@ -33,7 +33,7 @@ export function LoginScreen() {
   const site = useSite();
   return (
     <AuthLayout
-      name={site?.name ?? 'Approvals'}
+      name={site?.name ?? PRODUCT}
       logo={site?.logoDataUrl}
       title={<>Requests and <em>approvals</em></>}
       lead="Submit a form, follow it through each approval step, and keep the signed PDF of every decision."

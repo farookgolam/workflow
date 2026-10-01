@@ -1,10 +1,10 @@
 module.exports = {
-  file: 'ApprovalFlow-Administrator-Manual.pdf',
+  file: 'FileBank-WorkFlow-Administrator-Manual.pdf',
   title: 'Administrator Manual',
   subtitle: 'Configuring forms, approval chains and users, and overseeing requests',
   audience:
     'This manual is for people with the Admin role. It covers the administrator portal: the dashboard, request oversight and actions, form and approval-chain configuration, reports, user management and the audit log. Server installation is covered separately in docs/DEPLOYMENT-IIS.md. Everyday submitting and approving is covered in the User Manual.',
-  version: '1.4',
+  version: '1.5',
   date: 'September 2026',
   blocks: [
     { h1: 'Overview' },
@@ -31,7 +31,7 @@ module.exports = {
       'The manuals always show the current version: they are updated with the system itself.',
     ] },
     { h2: 'After the system is updated' },
-    { p: 'When a new version is installed, anyone who already had the portal open sees **A new version of ApprovalFlow is available** with a **Reload** button, and the next page they open is loaded in the new version by itself. Nobody has to clear their browser, and an approver is never left on an old screen that the updated system would refuse.' },
+    { p: 'When a new version is installed, anyone who already had the portal open sees **A new version of FileBank WorkFlow is available** with a **Reload** button, and the next page they open is loaded in the new version by itself. Nobody has to clear their browser, and an approver is never left on an old screen that the updated system would refuse.' },
     { h2: 'Light or dark colours' },
     { p: 'The small icon next to **Help** in the top bar (and at the top of the sign-in page) switches between three colour choices, one per click:' },
     { table: { widths: [0.22, 0.78], head: ['Icon', 'Colours'], rows: [

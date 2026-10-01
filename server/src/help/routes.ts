@@ -15,11 +15,11 @@ import { AppError } from '../http/errors';
 import { requirePlatformAdmin } from '../platform/identity';
 
 export const MANUALS = {
-  user: 'ApprovalFlow-User-Manual.pdf',
-  admin: 'ApprovalFlow-Administrator-Manual.pdf',
-  global: 'ApprovalFlow-Global-Administrator-Manual.pdf',
+  user: 'FileBank-WorkFlow-User-Manual.pdf',
+  admin: 'FileBank-WorkFlow-Administrator-Manual.pdf',
+  global: 'FileBank-WorkFlow-Global-Administrator-Manual.pdf',
   // the request workflow on two pages: diagram and step by step (docs/manuals/build-process-flow.cjs)
-  workflow: 'ApprovalFlow-Process-Flow.pdf',
+  workflow: 'FileBank-WorkFlow-Process-Flow.pdf',
 } as const;
 type Manual = keyof typeof MANUALS;
 

@@ -21,11 +21,11 @@ const linkFor = (as: string, manual: string) => request(app).post(`${api}/help/l
 
 describe('manuals are for signed-in people only', () => {
   it('cannot be read without a link from a signed-in session', async () => {
-    expect((await request(app).get(`${api}/help/manuals/ApprovalFlow-User-Manual.pdf`)).status).toBe(401);
-    expect((await request(app).get(`${api}/help/manuals/ApprovalFlow-User-Manual.pdf?t=forged`)).status).toBe(401);
+    expect((await request(app).get(`${api}/help/manuals/FileBank-WorkFlow-User-Manual.pdf`)).status).toBe(401);
+    expect((await request(app).get(`${api}/help/manuals/FileBank-WorkFlow-User-Manual.pdf?t=forged`)).status).toBe(401);
     expect((await request(app).post(`${api}/help/link`).send({ manual: 'user' })).status).toBe(401);
     // a sign-in token is not a manual link
-    expect((await request(app).get(`${api}/help/manuals/ApprovalFlow-User-Manual.pdf?t=${tok.sam}`)).status).toBe(401);
+    expect((await request(app).get(`${api}/help/manuals/FileBank-WorkFlow-User-Manual.pdf?t=${tok.sam}`)).status).toBe(401);
   });
 
   it('gives each person the manuals for their role, as a PDF the browser can show', async () => {
@@ -50,7 +50,7 @@ describe('manuals are for signed-in people only', () => {
 
   it('a link opens only the manual it was made for', async () => {
     const t = new URL(`http://x${(await linkFor('sam', 'user')).body.url}`).searchParams.get('t');
-    expect((await request(app).get(`${api}/help/manuals/ApprovalFlow-Administrator-Manual.pdf?t=${encodeURIComponent(t!)}`)).status).toBe(401);
+    expect((await request(app).get(`${api}/help/manuals/FileBank-WorkFlow-Administrator-Manual.pdf?t=${encodeURIComponent(t!)}`)).status).toBe(401);
     expect((await request(app).get(`${api}/help/manuals/..%2F..%2Fserver%2F.env?t=${encodeURIComponent(t!)}`)).status).toBe(401);
   });
 });

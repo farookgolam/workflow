@@ -1,4 +1,7 @@
-# ApprovalFlow
+# FileBank WorkFlow
+
+(Product name since v1.0.21. "ApprovalFlow" remains the internal name: this repository, the database, the IIS site, the
+Windows service approvalflowapi.exe and C:\apps\approvalflow on the servers.)
 
 Multi-step approval workflow, hosted for one or many customer organisations: a submitter fills in a form, each approver in an ordered chain
 gets a secure emailed link, and the outcome (approved **or** rejected) is rendered to a PDF and archived to SharePoint. Each customer has its

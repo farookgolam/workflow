@@ -58,7 +58,7 @@ export function UpdateWatcher() {
   if (!stale) return null;
   return (
     <div className="update-banner" role="status">
-      <span>A new version of ApprovalFlow is available.</span>
+      <span>A new version of FileBank WorkFlow is available.</span>
       <button type="button" className="primary" onClick={() => window.location.reload()}>Reload</button>
     </div>
   );

@@ -50,7 +50,7 @@ const schema = z.object({
   SMTP_SECURE: bool, // true = implicit TLS (465); false = plain/STARTTLS
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
-  MAIL_FROM: z.string().default('Approvals <no-reply@localhost>'),
+  MAIL_FROM: z.string().default('FileBank WorkFlow <no-reply@localhost>'),
   // the daily summary for approvers who chose it goes out from this hour, server time, Monday to Friday
   DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(7),
   STORAGE_DIR: z.string().default('./storage'),

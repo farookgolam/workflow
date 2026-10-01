@@ -1,9 +1,9 @@
 module.exports = {
-  file: 'ApprovalFlow-Release-Process.pdf',
+  file: 'FileBank-WorkFlow-Release-Process.pdf',
   title: 'Release Process',
   subtitle: 'Moving a change from a development machine to pre-production and production',
   audience:
-    'This guide is for whoever changes and releases ApprovalFlow. It covers the path every change takes: a development machine (this PC or the dev server), GitHub, the pre-production server (vc-workflow) and, later, production. It assumes each environment is already installed.',
+    'This guide is for whoever changes and releases FileBank WorkFlow. It covers the path every change takes: a development machine (this PC or the dev server), GitHub, the pre-production server (vc-workflow) and, later, production. It assumes each environment is already installed.',
   version: '1.0',
   date: 'September 2026',
   blocks: [

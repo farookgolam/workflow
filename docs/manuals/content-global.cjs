@@ -1,10 +1,10 @@
 module.exports = {
-  file: 'ApprovalFlow-Global-Administrator-Manual.pdf',
+  file: 'FileBank-WorkFlow-Global-Administrator-Manual.pdf',
   title: 'Global Administrator Manual',
   subtitle: 'Creating and looking after the customer organisations on an installation',
   audience:
-    'This manual is for the people who run an ApprovalFlow installation for more than one organisation: creating customers, giving each one its address and first administrator, suspending and restoring access, and helping a customer administrator when something goes wrong. It assumes the server is already installed - that is covered in docs/DEPLOYMENT-IIS.md. What a customer administrator does inside their own organisation is covered in the Administrator Manual.',
-  version: '1.3',
+    'This manual is for the people who run an FileBank WorkFlow installation for more than one organisation: creating customers, giving each one its address and first administrator, suspending and restoring access, and helping a customer administrator when something goes wrong. It assumes the server is already installed - that is covered in docs/DEPLOYMENT-IIS.md. What a customer administrator does inside their own organisation is covered in the Administrator Manual.',
+  version: '1.4',
   date: 'September 2026',
   blocks: [
     { h1: 'Overview' },

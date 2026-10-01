@@ -15,11 +15,11 @@ export async function queueAccountCreatedEmail(
   tenantId: number, user: { userId: number; email: string; displayName: string }, tx: Tx, opts: { asAdministrator?: boolean } = {},
 ): Promise<void> {
   const t = await tenantById(tenantId);
-  const org = t?.name ?? 'the approvals system';
+  const org = t?.name ?? 'FileBank WorkFlow';
   await queueNotification(tenantId, {
     type: 'AccountCreated',
     to: { userId: user.userId, email: user.email },
-    subject: `Your account for ${t?.name ?? 'approvals'}`,
+    subject: `Your account for ${t?.name ?? 'FileBank WorkFlow'}`,
     bodyHtml: emailBody([
       `Hello ${user.displayName},`,
       opts.asAdministrator ? `You have been given an administrator account for ${org}.` : `An administrator has given you an account for ${org}.`,

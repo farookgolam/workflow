@@ -1,11 +1,11 @@
-// The workflow sheet under Help in the app: node docs/manuals/build-process-flow.cjs -> ApprovalFlow-Process-Flow.pdf
+// The workflow sheet under Help in the app: node docs/manuals/build-process-flow.cjs -> FileBank-WorkFlow-Process-Flow.pdf
 // (build-manuals.cjs runs it too). Page 1: the diagram with numbered steps; page 2: each step explained.
 // Uses PDFKit from the server's node_modules (npm install in server/ first).
 const fs = require('node:fs');
 const path = require('node:path');
 const PDFDocument = require('node:module').createRequire(path.join(__dirname, '..', '..', 'server', 'package.json'))('pdfkit');
 
-const OUT = path.join(__dirname, 'ApprovalFlow-Process-Flow.pdf');
+const OUT = path.join(__dirname, 'FileBank-WorkFlow-Process-Flow.pdf');
 const WIN = 'C:/Windows/Fonts/';
 const FONT = fs.existsSync(`${WIN}arial.ttf`)
   ? { r: `${WIN}arial.ttf`, b: `${WIN}arialbd.ttf` }
@@ -18,7 +18,7 @@ const C = {
   back: '#6d28d9', backSoft: '#f1ebfd', warn: '#b4410b', node: '#ffffff',
 };
 
-const doc = new PDFDocument({ size: 'LETTER', layout: 'landscape', margin: 0, bufferPages: true, info: { Title: 'ApprovalFlow - Request workflow', Author: 'ApprovalFlow' } });
+const doc = new PDFDocument({ size: 'LETTER', layout: 'landscape', margin: 0, bufferPages: true, info: { Title: 'FileBank WorkFlow - Request workflow', Author: 'FileBank WorkFlow' } });
 doc.pipe(fs.createWriteStream(OUT));
 const W = doc.page.width; // 792
 const H = doc.page.height; // 612
@@ -26,7 +26,7 @@ const M = 36;
 
 // ---- header ----
 doc.rect(0, 0, W, 6).fill(C.yellow);
-doc.font(FONT.b).fontSize(20).fillColor(C.ink).text('ApprovalFlow  |  Request workflow', M, 26);
+doc.font(FONT.b).fontSize(20).fillColor(C.ink).text('FileBank WorkFlow  |  Request workflow', M, 26);
 doc.font(FONT.r).fontSize(10).fillColor(C.muted)
   .text('How a request moves from submission to a final, signed and archived decision.', M, 51);
 
@@ -254,7 +254,7 @@ doc.font(FONT.r).fontSize(7.8).fillColor(C.muted).text(
 for (let i = 0; i < 2; i++) {
   doc.switchToPage(i);
   doc.font(FONT.r).fontSize(7.5).fillColor(C.muted)
-    .text(`ApprovalFlow  |  Request workflow  |  Page ${i + 1} of 2`, M, H - 24, { width: W - 2 * M, align: 'center', lineBreak: false });
+    .text(`FileBank WorkFlow  |  Request workflow  |  Page ${i + 1} of 2`, M, H - 24, { width: W - 2 * M, align: 'center', lineBreak: false });
 }
 
 doc.end();

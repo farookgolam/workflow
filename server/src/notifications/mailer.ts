@@ -49,7 +49,7 @@ const layout = (subject: string, body: string) =>
 <div style="max-width:600px;margin:24px auto;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:24px 28px">
 <h2 style="margin:0 0 16px;font-size:18px">${subject.replace(/[&<>]/g, (c) => `&#${c.charCodeAt(0)};`)}</h2>
 ${body}
-<p style="margin-top:24px;font-size:12px;color:#6b7280">This is an automated message from the approvals system. Please do not reply.</p>
+<p style="margin-top:24px;font-size:12px;color:#6b7280">This is an automated message from FileBank WorkFlow. Please do not reply.</p>
 </div></body></html>`;
 
 const toText = (html: string) =>

@@ -1,14 +1,14 @@
 module.exports = {
-  file: 'ApprovalFlow-User-Manual.pdf',
+  file: 'FileBank-WorkFlow-User-Manual.pdf',
   title: 'User Manual',
   subtitle: 'For people who submit requests and people who approve them',
   audience:
     'This manual explains how to sign in, submit a request and follow its progress, and how to review and decide on requests that are sent to you for approval. Administrators have a separate manual.',
-  version: '1.4',
+  version: '1.5',
   date: 'September 2026',
   blocks: [
     { h1: 'How the system works' },
-    { p: 'ApprovalFlow moves a request through a fixed series of approval steps. Each form has its own chain of approvers, set up by your administrator.' },
+    { p: 'FileBank WorkFlow moves a request through a fixed series of approval steps. Each form has its own chain of approvers, set up by your administrator.' },
     { ol: [
       'A **submitter** fills in a form and submits it. The request gets a number such as **REQ-000123**.',
       'The approver for **Step 1** receives an email with the request\'s details and **Approve**, **Send back for changes** and **Reject** buttons. They review the request and decide.',
@@ -262,7 +262,7 @@ module.exports = {
       ['Request not found', 'The request is not yours, or the number is wrong. Submitters can open only their own requests.'],
       ['The PDF has not been generated yet', 'Wait a minute and try again.'],
       ['Too many attempts. Please wait a minute.', 'Sign-in attempts are rate-limited. Wait one minute.'],
-      ['A new version of ApprovalFlow is available', 'The system was updated while your page was open. Choose **Reload** (anything you have typed on this page is lost), or carry on: the next page you open is loaded in the new version by itself.'],
+      ['A new version of FileBank WorkFlow is available', 'The system was updated while your page was open. Choose **Reload** (anything you have typed on this page is lost), or carry on: the next page you open is loaded in the new version by itself.'],
     ] } },
     { h2: 'Good practice' },
     { ul: [
