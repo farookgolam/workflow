@@ -462,7 +462,8 @@ nav.seg a.on { background: var(--on); color: var(--on-text); font-weight: 600; }
 dialog.about { width: min(30rem, calc(100vw - 2rem)); padding: 1.5rem 1.75rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: 0 12px 40px rgb(0 0 0 / .25); }
 dialog.about::backdrop { background: rgb(0 0 0 / .45); }
 dialog.about h2 { margin: .75rem 0 1rem; }
-.about-logo { height: 56px; width: auto; display: block; }
+/* the logo is the white version (white outline, white "Information Management"): it sits on a dark plate in both themes */
+.about-logo { height: 72px; width: auto; max-width: 100%; box-sizing: content-box; display: block; padding: 14px 18px; background: #14171c; border-radius: 6px; object-fit: contain; }
 .about-table { width: 100%; border-collapse: collapse; }
 .about-table th { text-align: left; font-weight: 600; color: var(--muted); padding: .45rem 1rem .45rem 0; white-space: nowrap; vertical-align: top; width: 1%; }
 .about-table td { padding: .45rem 0; overflow-wrap: anywhere; }

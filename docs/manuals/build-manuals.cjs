@@ -14,7 +14,8 @@ const PDFDocument = createRequire(path.join(__dirname, '..', '..', 'server', 'pa
 const WIN = 'C:\\Windows\\Fonts\\';
 const arial = ['arial.ttf', 'arialbd.ttf', 'ariali.ttf'].every((f) => fs.existsSync(WIN + f));
 const F = arial ? { r: WIN + 'arial.ttf', b: WIN + 'arialbd.ttf', i: WIN + 'ariali.ttf' } : { r: 'Helvetica', b: 'Helvetica-Bold', i: 'Helvetica-Oblique' };
-const LOGO = path.join(__dirname, 'filebank-logo.png'); // also the app's About window (client/public/filebank-logo.png)
+const LOGO = path.join(__dirname, 'filebank-logo.png'); // the FileBank badge, for white paper
+const LOGO_WHITE = path.join(__dirname, 'filebank-logo-white.png'); // white outline + "Information Management", for dark backgrounds; also the app's About window (client/public/filebank-logo-white.png)
 const CONTACT = { web: 'filebankinc.com', url: 'https://filebankinc.com', phone: '973-279-4411' }; // as server/src/about/routes.ts
 const C = { ink: '#111827', muted: '#5b6472', rule: '#d9dde3', soft: '#f3f4f6', accent: '#1d4ed8', accentSoft: '#eff4ff', warn: '#92400e', warnSoft: '#fef3c7', ok: '#166534', okSoft: '#e8f6ec' };
 const M = { left: 60, right: 60, top: 78, bottom: 66 };
@@ -50,8 +51,7 @@ function render(manual, outFile, tocPageNumbers) {
   const filebank = (manual.brand ?? 'FileBank WorkFlow') === 'FileBank WorkFlow';
   doc.rect(0, 0, doc.page.width, 300).fill(C.accent);
   if (filebank) {
-    doc.roundedRect(M.left - 8, 34, 132, 60, 6).fill('#ffffff');
-    doc.image(LOGO, M.left, 40, { height: 48 });
+    doc.image(LOGO_WHITE, M.left, 36, { height: 62 }); // the white version, with its line of words, straight on the dark cover
   }
   doc.fillColor('#ffffff').font(F.r).fontSize(13).text(manual.brand ?? 'FileBank WorkFlow', M.left, 120, { characterSpacing: 1.5 });
   doc.font(F.b).fontSize(34).text(manual.title, M.left, 150, { width: W });
@@ -238,7 +238,7 @@ function render(manual, outFile, tocPageNumbers) {
     doc.page.margins.bottom = 0;
     doc.font(F.r).fontSize(8.5).fillColor(C.muted);
     doc.text(`${manual.brand ?? 'FileBank WorkFlow'}  ·  ${manual.title}`, M.left, 40, { width: W, lineBreak: false });
-    if (filebank) doc.image(LOGO, M.left + W - 34, 32, { height: 14 });
+    if (filebank) doc.image(LOGO, M.left + W - 72, 32, { fit: [72, 16], align: 'right' });
     doc.moveTo(M.left, 56).lineTo(M.left + W, 56).lineWidth(0.5).strokeColor(C.rule).stroke();
     doc.text(`Page ${i + 1} of ${range.count}`, M.left, doc.page.height - 44, { width: W, align: 'center', lineBreak: false });
   }

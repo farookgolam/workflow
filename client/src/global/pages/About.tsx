@@ -18,7 +18,7 @@ export function About() {
     <div className="stack">
       <h1>About</h1>
       <section className="card">
-        <img src="/filebank-logo.png" alt="FileBank" className="about-logo" />
+        <img src="/filebank-logo-white.png" alt="FileBank" className="about-logo" />
         <table className="about-table" style={{ marginTop: '1rem' }}><tbody><AboutRows about={data} /></tbody></table>
       </section>
 

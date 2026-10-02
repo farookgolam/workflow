@@ -36,7 +36,7 @@ export function AboutDialog({ load, onClose }: { load: () => Promise<AboutBasics
   }, [load]);
   return createPortal(
     <dialog ref={ref} className="about" aria-labelledby="about-title" onClose={onClose}>
-      <img src="/filebank-logo.png" alt="FileBank" className="about-logo" />
+      <img src="/filebank-logo-white.png" alt="FileBank" className="about-logo" />
       <h2 id="about-title">About {about?.product ?? 'FileBank WorkFlow'}</h2>
       {error && <p className="notice bad" role="alert">{error}</p>}
       {!about && !error && <p className="muted">Loading…</p>}
