@@ -31,7 +31,7 @@ export function AttachmentList({ items, pathOf, onRemove, disabled }: {
         {items.map((a) => (
           <li key={a.attachmentId}>
             <button type="button" className="link" onClick={() => { setError(''); download(pathOf(a), a.fileName).catch((e: Error) => setError(e.message)); }}>{a.fileName}</button>
-            <span className="muted small"> · {fileSize(a.sizeBytes)}{a.uploadedBy ? ` · ${a.uploadedBy}` : ''}</span>
+            <span className="muted small">, {fileSize(a.sizeBytes)}{a.uploadedBy ? `, ${a.uploadedBy}` : ''}</span>
             {onRemove && <> <button type="button" className="link danger-link" disabled={disabled} onClick={() => onRemove(a)} aria-label={`Remove ${a.fileName}`}>Remove</button></>}
           </li>
         ))}

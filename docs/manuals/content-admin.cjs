@@ -6,7 +6,7 @@ module.exports = {
   subtitle: "Step-by-step instructions for setting up forms, approval chains and people, and looking after requests",
   audience:
     "This manual is for people with the Admin role. Each task is a short list of steps with a picture of the screen; the button or box a step talks about is outlined in red. Reference tables (controls, formulas, audit events, emails) follow the tasks in each chapter. The pictures show a demonstration organisation, Riverside Academy, with made-up people such as Alex Admin and Maria Manager. Everyday submitting and approving is in the User Manual; server installation is in docs/DEPLOYMENT-IIS.md.",
-  version: "2.0",
+  version: "2.1",
   date: "October 2026",
   blocks: [
     // ---------------------------------------------------------------------------------------------

@@ -5,6 +5,7 @@ import { NextApproverPicker, choicePayload, needsChoice, type StepHandOff } from
 import { AttachmentList, AttachmentUploader, type Attachment } from '../attachments';
 import { StatusBadge, ValueList, fmtDateTime, type FieldValue } from '../fields';
 import { ChangeList, SendBackHistory, type SendBack } from '../sendback';
+import { SignOff, type SignOffStep } from '../signoff';
 import { SignatureImage, SignaturePad } from '../sigpad';
 
 /** What the approver pressed in the email: Approve, Send back or Reject (opens the page ready for that). */
@@ -139,7 +140,7 @@ export function ApprovalPage() {
 
       {step.decided && (
         <>
-          <div className="prev-head"><span className="muted">{step.decided.actedBy} · {fmtDateTime(step.decided.actedAt)}</span><StatusBadge status={step.decided.decision} /></div>
+          <div className="prev-head"><span className="muted">{step.decided.actedBy}, {fmtDateTime(step.decided.actedAt)}</span><StatusBadge status={step.decided.decision} /></div>
           <ValueList items={step.decided.responses} />
           {step.decided.comments && <blockquote>{step.decided.comments}</blockquote>}
           {step.decided.signature && <SignatureImage value={step.decided.signature} label={`Signature of ${step.decided.actedBy}`} />}
@@ -225,19 +226,37 @@ export function ApprovalPage() {
       )}
     </section>
   );
-  // arrived from a button in the email: the decision comes first, the details under it
+  // arrived from a button in the email: on a narrow screen the decision comes first, the details under it
   const quick = !!intent && step.canAct && !outcome;
+
+  // The sign-off strip, as far as this approver may see: earlier steps, their own, and what is still to come.
+  const stopped = request.status === 'Rejected' || request.status === 'Cancelled';
+  const strip: SignOffStep[] = [
+    ...previousSteps.map((p) => ({ stepOrder: p.stepOrder, name: p.name, status: p.decision, approver: p.actedBy, actedAt: p.actedAt })),
+    {
+      stepOrder: step.stepOrder, name: step.name, status: step.decided?.decision ?? step.status,
+      approver: step.decided?.actedBy ?? openReturn?.returnedBy ?? null, actedAt: step.decided?.actedAt,
+    },
+    ...Array.from({ length: request.totalSteps - step.stepOrder }, (_, i) => {
+      const next = i === 0 ? step.nextStep : null;
+      return {
+        stepOrder: step.stepOrder + i + 1, name: next?.name ?? null, status: stopped ? (request.status === 'Rejected' ? 'NotReached' : 'Cancelled') : 'Waiting',
+        approver: stopped ? null : next ? (next.mode === 'chosen' ? (step.canAct ? 'You choose who' : 'Chosen by the approver before') : next.approver?.displayName ?? null) : 'Not reached yet',
+      };
+    }),
+  ];
 
   return (
     <div className="stack">
       <div className="page-head">
         <div>
-          <p className="eyebrow">{request.formName} · {request.requestNumber}</p>
-          <h1>Step {step.stepOrder} of {request.totalSteps}: {step.name}</h1>
-          <p className="muted">Submitted by {request.submitterName} on {fmtDateTime(request.submittedAt)}</p>
+          <p className="eyebrow"><Link to={'/'}>Waiting for my approval</Link> / {request.requestNumber}</p>
+          <div className="title-row"><h1>{request.formName}</h1><span className="reqno">{request.requestNumber}</span></div>
+          <p className="muted">Submitted by {request.submitterName} on {fmtDateTime(request.submittedAt)}. Step {step.stepOrder} of {request.totalSteps}: {step.name}.</p>
         </div>
         <StatusBadge status={step.status === 'Returned' ? 'Returned' : request.status} />
       </div>
+      <SignOff steps={strip} big mine={step.canAct ? step.stepOrder : undefined} />
 
       {outcome && (
         <p className={`notice ${outcome.requestStatus === 'Rejected' ? 'bad' : 'ok'}`} role="status">
@@ -256,37 +275,41 @@ export function ApprovalPage() {
         </section>
       )}
 
-      {quick && <p className="muted small" style={{ margin: 0 }}>Check the request below before you confirm.</p>}
-      {quick && yourSection}
+      {/* the request reads like a document on the left; the decision stays in view beside it */}
+      <div className={`approve${quick ? ' quick' : ''}`}>
+        <div className="approve-doc">
+          <section className="card">
+            <h2>Original submission <span className="tag">Read-only</span></h2>
+            <ValueList items={submission} />
+          </section>
 
-      <section className="card">
-        <h2>Original submission <span className="tag">Read-only</span></h2>
-        <ValueList items={submission} />
-      </section>
+          {previousSteps.length > 0 && (
+            <section className="card">
+              <h2>Previous approvals <span className="tag">Read-only</span></h2>
+              {previousSteps.map((p) => (
+                <div className="prev-step" key={p.stepOrder}>
+                  <div className="prev-head">
+                    <strong>Step {p.stepOrder}: {p.name}</strong>
+                    <StatusBadge status={p.decision} />
+                  </div>
+                  <p className="muted small">{p.actedBy}, {fmtDateTime(p.actedAt)}</p>
+                  <ValueList items={p.responses} />
+                  {p.comments && <blockquote>{p.comments}</blockquote>}
+                  {p.signature && <SignatureImage value={p.signature} label={`Signature of ${p.actedBy}`} />}
+                  <AttachmentList items={p.attachments} pathOf={(a) => `/approvals/requests/${request.requestId}/attachments/${a.attachmentId}`} />
+                </div>
+              ))}
+            </section>
+          )}
 
-      {previousSteps.length > 0 && (
-        <section className="card">
-          <h2>Previous approvals <span className="tag">Read-only</span></h2>
-          {previousSteps.map((p) => (
-            <div className="prev-step" key={p.stepOrder}>
-              <div className="prev-head">
-                <strong>Step {p.stepOrder}: {p.name}</strong>
-                <StatusBadge status={p.decision} />
-              </div>
-              <p className="muted small">{p.actedBy} · {fmtDateTime(p.actedAt)}</p>
-              <ValueList items={p.responses} />
-              {p.comments && <blockquote>{p.comments}</blockquote>}
-              {p.signature && <SignatureImage value={p.signature} label={`Signature of ${p.actedBy}`} />}
-              <AttachmentList items={p.attachments} pathOf={(a) => `/approvals/requests/${request.requestId}/attachments/${a.attachmentId}`} />
-            </div>
-          ))}
-        </section>
-      )}
-
-      {/* the round shown at the top is not repeated here */}
-      <SendBackHistory items={returns.filter((x) => !(step.canAct && x === lastBack))} />
-
-      {!quick && yourSection}
+          {/* the round shown at the top is not repeated here */}
+          <SendBackHistory items={returns.filter((x) => !(step.canAct && x === lastBack))} />
+        </div>
+        <aside className="approve-side">
+          {quick && <p className="muted small">Check the request before you confirm.</p>}
+          {yourSection}
+        </aside>
+      </div>
 
       <p><Link to={'/'}>← My approvals</Link></p>
     </div>

@@ -159,7 +159,7 @@ export function Customers() {
                 <td>
                   <Link to={`/customers/${t.tenantId}`}>{t.name}</Link>
                   {t.removedAt ? (
-                    <span className="badge badge-rejected" style={{ marginLeft: 8 }}>Removed · deleted on {new Date(t.purgeAfter ?? '').toLocaleDateString()}</span>
+                    <span className="badge badge-rejected" style={{ marginLeft: 8 }}>Removed, deleted on {new Date(t.purgeAfter ?? '').toLocaleDateString()}</span>
                   ) : (
                     !t.isActive && <span className="badge badge-rejected" style={{ marginLeft: 8 }}>Suspended</span>
                   )}

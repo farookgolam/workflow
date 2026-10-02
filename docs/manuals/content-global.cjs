@@ -6,7 +6,7 @@ module.exports = {
   subtitle: "Step-by-step instructions for creating and looking after the customer organisations on an installation",
   audience:
     "This manual is for the people who run a FileBank WorkFlow installation for more than one organisation. Each task is a short list of steps with a picture of the screen; the button or box a step talks about is outlined in red. The pictures show demonstration customers such as Riverside Academy. Server installation is in docs/DEPLOYMENT-IIS.md; what a customer administrator does inside their own organisation is in the Administrator Manual.",
-  version: "2.0",
+  version: "2.1",
   date: "October 2026",
   blocks: [
     // ---------------------------------------------------------------------------------------------

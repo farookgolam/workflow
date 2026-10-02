@@ -169,7 +169,7 @@ export function AdminReports() {
               <tr key={s.reportId}>
                 <td><button className="link" onClick={() => void openSaved(s)}>{s.name}</button></td>
                 <td>{s.formName}</td>
-                <td className="muted small">{usDateTime(s.updatedAt)}{s.updatedBy && ` · ${s.updatedBy}`}</td>
+                <td className="muted small">{usDateTime(s.updatedAt)}{s.updatedBy && `, ${s.updatedBy}`}</td>
                 <td className="row-actions">
                   {confirmDelete?.reportId === s.reportId
                     ? <><button className="link danger-link" onClick={() => void remove(s)}>Yes, delete</button><button className="link" onClick={() => setConfirmDelete(null)}>Cancel</button></>
@@ -221,7 +221,7 @@ export function AdminReports() {
                 return (
                   <li key={`${c.ref}-${i}`} style={{ marginBottom: '.3rem' }}>
                     <span className="b-row" style={{ gap: '.5rem', alignItems: 'center', display: 'inline-flex', flexWrap: 'wrap' }}>
-                      <span>{col?.label ?? c.ref}{col && <span className="muted small"> · {col.group}</span>}</span>
+                      <span>{col?.label ?? c.ref}{col && <span className="muted small">, {col.group}</span>}</span>
                       {grouped && c.ref !== def.groupBy && (
                         <select aria-label={`Summary of ${col?.label}`} value={agg} onChange={(e) => patch({ columns: def.columns.map((x, j) => (j === i ? { ...x, agg: e.target.value as Agg } : x)) })} style={{ width: 'auto' }}>
                           {(col?.type === 'number' ? (['sum', 'avg', 'min', 'max', 'count'] as Agg[]) : (['count'] as Agg[])).map((a) => <option key={a} value={a}>{AGG_LABEL[a]}</option>)}

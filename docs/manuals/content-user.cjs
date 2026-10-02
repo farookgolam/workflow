@@ -6,7 +6,7 @@ module.exports = {
   subtitle: "Step-by-step instructions for people who submit requests and people who approve them",
   audience:
     "Each task in this manual is a short list of steps with a picture of the screen; the button or box a step talks about is outlined in red. Look up what you want to do in the contents and follow the steps. The pictures show a demonstration organisation, Riverside Academy, with made-up people such as Sam Submitter and Maria Manager - your organisation's name, logo, forms and people will be your own. Administrators have a separate manual.",
-  version: "2.0",
+  version: "2.1",
   date: "October 2026",
   blocks: [
     // ---------------------------------------------------------------------------------------------
@@ -51,7 +51,7 @@ module.exports = {
       ] },
     { task: "Find your way around",
       steps: [
-        { text: "Your **home page** shows what you can do: **Start a new request** (the forms you can fill in), **My submissions** (your requests) and, for approvers, **Waiting for my approval**.", img: "screens/user-04-home.jpg" },
+        { text: "Your **home page** starts with one sentence saying what needs you - for example \"2 requests are waiting for your approval\". Under it is what you can do: **Start a new request** (the forms you can fill in), **My submissions** (your requests) and, for approvers, **Waiting for my approval**.", img: "screens/user-04-home.jpg" },
         { text: "Top right: **Help** opens the manuals and the workflow sheet; the small screen icon switches **light / dark** colours; **your name** opens your account (password key and approval emails).", img: "screens/user-05-help.jpg", width: 0.7 },
       ] },
     { task: "See the version, or contact FileBank",
@@ -83,8 +83,8 @@ module.exports = {
       ] },
     { task: "Follow your requests",
       steps: [
-        { text: "Your home page lists **My submissions**, newest first, with anything sent back to you at the top. The coloured bars show each step: **green** approved, **amber** waiting now, **purple** sent back to you, **red** rejected, **grey** not reached yet. The buttons at the top filter the list.", img: "screens/user-07-my-submissions.jpg" },
-        { text: "Click a request number to open it. **Progress** shows every step: who decided and when, or who has it now and for how long.", img: "screens/user-08-progress.jpg", maxH: 260 },
+        { text: "Your home page lists **My submissions**, newest first, with anything sent back to you at the top. Under each request a row of boxes shows every approval step, who signs it and when: **green** signed, **yellow** with that person now, **purple** sent back to you, **red** rejected, **striped** not reached yet. The tabs above the list filter it.", img: "screens/user-07-my-submissions.jpg" },
+        { text: "Click a request number to open it. The same row of boxes is under the title, and **Progress** lists every step: who decided and when, or who has it now and for how long.", img: "screens/user-08-progress.jpg", maxH: 260 },
       ] },
     { task: "Make changes when a request is sent back",
       need: "a request an approver sent back to you (you receive a \"Changes needed\" email).",
@@ -128,11 +128,11 @@ module.exports = {
       ] },
     { task: "Find what is waiting for you",
       steps: [
-        { text: "Your home page lists **Waiting for my approval**, oldest first, with how long each has waited; **Overdue** marks one past its reminder time. Click a request number to open it.", img: "screens/user-14-waiting.jpg", maxH: 220 },
+        { text: "Your home page lists **Waiting for my approval**, oldest first, with what it is about and how long it has waited; **overdue** marks one past its reminder time. Choose **Review** (or the request number) to open it.", img: "screens/user-14-waiting.jpg", maxH: 220 },
       ] },
     { task: "Review a request",
       steps: [
-        { text: "The approval page shows the **original submission** (read-only) at the top. Read it before you decide.", img: "screens/user-15-approval-page.jpg" },
+        { text: "The approval page shows the steps in a row of boxes under the title - yours says **With you** - then the **original submission** (read-only) on the left and **Your section** on the right. Read the submission before you decide.", img: "screens/user-15-approval-page.jpg" },
         { text: "From step 2 on, **Previous approvals** shows each earlier step: who decided, when, their comments, their signature and any documents they attached. You never see later steps.", img: "screens/user-21-previous.jpg", maxH: 260 },
       ] },
     { task: "Approve a request",

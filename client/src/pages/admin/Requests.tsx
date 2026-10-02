@@ -76,14 +76,14 @@ export function AdminRequests() {
                     <td><Link to={`/admin/requests/${r.requestId}`}>{r.requestNumber}</Link></td>
                     <td>{r.formName}</td><td>{r.submitterName}</td><td>{fmtDateTime(r.submittedAt)}</td>
                     <td><StatusBadge status={r.status} /> {r.overdue && <span className="badge badge-rejected">Overdue</span>}</td>
-                    <td>{r.currentStep ? `Step ${r.currentStep} of ${r.totalSteps} · ${r.waitingOn}` : '—'}</td>
+                    <td>{r.currentStep ? `Step ${r.currentStep} of ${r.totalSteps}, ${r.waitingOn}` : '—'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
             <div className="actions pager">
               <button disabled={page <= 1} onClick={() => set('page', String(page - 1))}>← Previous</button>
-              <span className="muted small">Page {page} of {pages} · {data.total} request(s)</span>
+              <span className="muted small">Page {page} of {pages}, {data.total} request(s)</span>
               <button disabled={page >= pages} onClick={() => set('page', String(page + 1))}>Next →</button>
             </div>
           </>
@@ -124,7 +124,7 @@ export function AdminRequestDetail() {
         <div>
           <p className="eyebrow">{r.formName}</p>
           <h1>{r.requestNumber}</h1>
-          <p className="muted">Submitted by {r.submitterName} on {fmtDateTime(r.submittedAt)}{r.closedAt && ` · closed ${fmtDateTime(r.closedAt)}`}</p>
+          <p className="muted">Submitted by {r.submitterName} on {fmtDateTime(r.submittedAt)}{r.closedAt && `, closed ${fmtDateTime(r.closedAt)}`}</p>
         </div>
         <StatusBadge status={r.status} />
       </div>
@@ -153,7 +153,7 @@ export function AdminRequestDetail() {
         {archive.status !== 'None' && (
           <dl className="values" style={{ marginTop: '1rem' }}>
             <div><dt>Archive status</dt><dd>{archive.pdfInFolder ? 'Stored in your file folder' : ARCHIVE_LABEL[archive.status] ?? archive.status}</dd></div>
-            {archive.pdfBytes !== null && <div><dt>Stored PDF</dt><dd>{archive.pdfInFolder ? 'In your organisation\'s file folder' : 'In the database'} · {Math.max(1, Math.round(archive.pdfBytes / 1024))} KB</dd></div>}
+            {archive.pdfBytes !== null && <div><dt>Stored PDF</dt><dd>{archive.pdfInFolder ? 'In your organisation\'s file folder' : 'In the database'}, {Math.max(1, Math.round(archive.pdfBytes / 1024))} KB</dd></div>}
           </dl>
         )}
       </section>
@@ -161,20 +161,20 @@ export function AdminRequestDetail() {
       <section className="card">
         <h2>Timeline</h2>
         <ol className="tracker">
-          <li className="tracker-approved"><strong>Submitted</strong><p className="muted small">{r.submitterName} · {fmtDateTime(r.submittedAt)}</p><ValueList items={r.data} /></li>
+          <li className="tracker-approved"><strong>Submitted</strong><p className="muted small">{r.submitterName}, {fmtDateTime(r.submittedAt)}</p><ValueList items={r.data} /></li>
           {r.steps.map((s) => (
             <li key={s.requestStepId} className={`tracker-${s.status.toLowerCase()}`}>
               <div className="prev-head"><strong>Step {s.stepOrder}: {s.name}</strong><StatusBadge status={s.status} /></div>
               <p className="muted small">
-                {s.actedBy ? `${s.actedBy} · ${fmtDateTime(s.actedAt)}${s.actedIp ? ` · ${s.actedIp}` : ''}${s.actedBy !== s.assignedTo ? ` (assigned to ${s.assignedTo})` : ''}` : `Assigned to ${s.assignedTo}`}
-                {!s.actedBy && s.delegateUserId && ` · delegate: ${userName(s.delegateUserId) ?? s.delegateUserId}`}
-                {s.status === 'Active' && s.activatedAt && ` · waiting since ${fmtDateTime(s.activatedAt)}`}
-                {s.status === 'Active' && s.dueAt && ` · due ${fmtDateTime(s.dueAt)}`}
+                {s.actedBy ? `${s.actedBy}, ${fmtDateTime(s.actedAt)}${s.actedIp ? `, ${s.actedIp}` : ''}${s.actedBy !== s.assignedTo ? ` (assigned to ${s.assignedTo})` : ''}` : `Assigned to ${s.assignedTo}`}
+                {!s.actedBy && s.delegateUserId && `, delegate: ${userName(s.delegateUserId) ?? s.delegateUserId}`}
+                {s.status === 'Active' && s.activatedAt && `, waiting since ${fmtDateTime(s.activatedAt)}`}
+                {s.status === 'Active' && s.dueAt && `, due ${fmtDateTime(s.dueAt)}`}
               </p>
               {r.returns.filter((x) => x.stepOrder === s.stepOrder).map((x, i) => (
                 <div key={i} className="notice back" style={{ margin: '.5rem 0' }}>
-                  <p style={{ margin: 0 }}><strong>Sent back</strong> by {x.returnedBy} · {fmtDateTime(x.returnedAt)}: {x.reason}</p>
-                  {x.resubmittedAt ? <><p style={{ margin: '.35rem 0 0' }}>Resubmitted by {r.submitterName} · {fmtDateTime(x.resubmittedAt)}{x.resubmitNote && `: ${x.resubmitNote}`}</p><ChangeList changes={x.changes} /></> : <p style={{ margin: '.35rem 0 0' }}>Waiting for {r.submitterName} to make changes.</p>}
+                  <p style={{ margin: 0 }}><strong>Sent back</strong> by {x.returnedBy}, {fmtDateTime(x.returnedAt)}: {x.reason}</p>
+                  {x.resubmittedAt ? <><p style={{ margin: '.35rem 0 0' }}>Resubmitted by {r.submitterName}, {fmtDateTime(x.resubmittedAt)}{x.resubmitNote && `: ${x.resubmitNote}`}</p><ChangeList changes={x.changes} /></> : <p style={{ margin: '.35rem 0 0' }}>Waiting for {r.submitterName} to make changes.</p>}
                 </div>
               ))}
               {s.responses.length > 0 && <ValueList items={s.responses} />}

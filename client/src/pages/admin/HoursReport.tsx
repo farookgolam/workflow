@@ -191,10 +191,10 @@ export function AdminHoursReport() {
       {result && (
         <section className="card">
           <div className="prev-head">
-            <h2 style={{ margin: 0 }}>{result.submitter ?? 'All submitters'} · {result.from === result.to ? fmtDate(result.from) : `${fmtDate(result.from)} – ${fmtDate(result.to)}`}</h2>
+            <h2 style={{ margin: 0 }}>{result.submitter ?? 'All submitters'}, {result.from === result.to ? fmtDate(result.from) : `${fmtDate(result.from)} – ${fmtDate(result.to)}`}</h2>
             <span className="hr-total">{fmtHours(result.totalHours)} hours</span>
           </div>
-          <p className="muted small">{result.lineCount} line(s){everyone && ` · ${result.people} person(s)`} · {result.includeInProgress ? 'approved and in-progress' : 'approved'} timesheets of {result.form}</p>
+          <p className="muted small">{result.lineCount} line(s){everyone && `, ${result.people} person(s)`}, {result.includeInProgress ? 'approved and in-progress' : 'approved'} timesheets of {result.form}</p>
           {result.truncated && <p className="notice">Only the most recent 20,000 timesheets were read. Choose one submitter to be sure nothing is missed.</p>}
           {result.lineCount === 0 ? <p className="muted">Nobody recorded hours on {result.from === result.to ? 'that day' : 'those days'}.</p> : (
             <div className="table-wrap">
@@ -205,7 +205,7 @@ export function AdminHoursReport() {
                 ) : (
                   <tr key={i} className={`hr-${l.kind}`}>
                     {everyone && <td>{l.kind === 'total' ? 'Total' : `Subtotal - ${l.submitter}`}</td>}
-                    <td colSpan={4 + result.extraColumns.length}>{everyone ? `${l.days} day(s)` : `Total · ${l.days} day(s)`}</td>
+                    <td colSpan={4 + result.extraColumns.length}>{everyone ? `${l.days} day(s)` : `Total, ${l.days} day(s)`}</td>
                     <td className="num">{fmtHours(l.hours)}</td><td />
                   </tr>
                 ))}</tbody>

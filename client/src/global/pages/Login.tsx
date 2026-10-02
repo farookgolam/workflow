@@ -23,7 +23,7 @@ export function GlobalLogin() {
 
   return (
     <AuthLayout
-      name="FileBank WorkFlow · Global"
+      name="FileBank WorkFlow Global"
       title={<>Global <em>management</em></>}
       lead="Create and look after customer organisations: their addresses, first administrators, access and support."
       foot="Customers sign in on their own address, not here."

@@ -68,6 +68,11 @@ describe('send back for changes', () => {
     expect(sent.BodyHtml).toContain(`/requests/${id}/edit`);
     const mine = (await request(app).get(`${api}/my/requests?status=Returned`).set(bearer(tok.sam))).body.requests;
     expect(mine).toMatchObject([{ requestId: id, status: 'InProgress', waitingOn: null, sentBack: { reason: 'Add the quote number', returnedBy: 'ANN' } }]);
+    // each row carries its steps for the sign-off strip: who signs and when, nothing an approver wrote
+    expect(mine[0].steps).toEqual([
+      { stepOrder: 1, name: 'Manager', status: 'Returned', approver: 'ANN', activatedAt: expect.any(String), actedAt: null },
+      { stepOrder: 2, name: 'Finance', status: 'Waiting', approver: 'BOB', activatedAt: null, actedAt: null },
+    ]);
     const detail = (await request(app).get(`${api}/my/requests/${id}`).set(bearer(tok.sam))).body.request;
     expect(detail.sentBack).toMatchObject({ stepOrder: 1, returnedBy: 'ANN', reason: 'Add the quote number' });
     expect(detail.progress.label).toBe('Sent back to you for changes by ANN');

@@ -8,25 +8,10 @@ import { useAuth } from '../auth';
 import { useLoad } from '../hooks';
 import { myTimeZone, waitedFor } from '../dates';
 import { ChangeList, type SendBack } from '../sendback';
-
-/** Compact "● ● ◐ ○" tracker: one segment per approval step. `back`: the current step sent it back for changes. */
-export function StepDots({ total, current, status, rejectedAt, back }: { total: number; current: number | null; status: string; rejectedAt?: number | null; back?: boolean }) {
-  return (
-    <span className="dots" role="img" aria-label={current ? `Step ${current} of ${total}${back ? ', sent back for changes' : ''}` : status}>
-      {Array.from({ length: total }, (_, i) => {
-        const n = i + 1;
-        const state =
-          status === 'Approved' ? 'done'
-          : status === 'Rejected' ? (n < (rejectedAt ?? 0) ? 'done' : n === rejectedAt ? 'bad' : 'todo')
-          : status === 'Cancelled' ? 'todo'
-          : n < (current ?? 0) ? 'done' : n === current ? (back ? 'back' : 'now') : 'todo';
-        return <i key={n} className={`dot dot-${state}`} />;
-      })}
-    </span>
-  );
-}
+import { SignOff, type SignOffStep } from '../signoff';
 
 interface MyRow {
+  steps: SignOffStep[];
   requestId: number; requestNumber: string; formId: number; formName: string; status: string; currentStep: number | null; currentStepName: string | null;
   totalSteps: number; waitingOn: string | null; waitingSince: string | null; submittedAt: string; closedAt: string | null;
   sentBack: { reason: string; returnedBy: string; returnedAt: string } | null;
@@ -43,57 +28,53 @@ export function MySubmissions() {
   const go = (next: Record<string, string>) => setParams(Object.fromEntries(Object.entries({ status, ...next }).filter(([, v]) => v)), { replace: true });
 
   return (
-    <section className="card">
-      <div className="prev-head" style={{ marginBottom: '1rem' }}>
-        <h2 style={{ margin: 0 }}>My submissions</h2>
-        <div className="seg" role="group" aria-label="Filter by status">
-          {[['', 'All'], ['Returned', 'Needs my changes'], ['InProgress', 'In progress'], ['Approved', 'Approved'], ['Rejected', 'Rejected']].map(([v, label]) => (
-            <button key={v} className={status === v ? 'on' : ''} onClick={() => go({ status: v, page: '' })}>{label}</button>
-          ))}
-        </div>
+    <section className="card bare">
+      <h2>My submissions</h2>
+      {/* the filter is the tabs of the folder the list sits in */}
+      <div className="tabs" role="group" aria-label="Filter by status">
+        {[['', 'All'], ['Returned', 'Needs my changes'], ['InProgress', 'In progress'], ['Approved', 'Approved'], ['Rejected', 'Rejected']].map(([v, label]) => (
+          <button key={v} className={status === v ? 'on' : ''} aria-pressed={status === v} onClick={() => go({ status: v, page: '' })}>{label}</button>
+        ))}
       </div>
-      {pdfError && <p className="notice bad">{pdfError}</p>}
-      {error ? <p className="notice bad">{error}</p> : !data ? <p className="muted">Loading…</p> : data.requests.length === 0 ? (
-        <p className="muted">{status ? 'Nothing with this status.' : 'You have not submitted anything yet.'}</p>
-      ) : (
-        <>
-          <ul className="sub-list">
+      <div className="sheet">
+        {pdfError && <p className="notice bad">{pdfError}</p>}
+        {error ? <p className="notice bad">{error}</p> : !data ? <p className="muted">Loading…</p> : data.requests.length === 0 ? (
+          <p className="muted">{status ? 'Nothing with this status.' : 'You have not submitted anything yet. Choose a form under "Start a new request".'}</p>
+        ) : (
+          <>
             {data.requests.map((r) => (
-              <li key={r.requestId}>
-                <div className="sub-main">
-                  <Link to={`/requests/${r.requestId}`} className="sub-title">{r.requestNumber}</Link>
-                  <span className="muted"> · {r.formName} · {fmtDateTime(r.submittedAt)}</span>
-                  <div className="sub-progress">
-                    <StepDots total={r.totalSteps} current={r.currentStep} status={r.status} rejectedAt={r.rejection?.stepOrder} back={!!r.sentBack} />
-                    <span className="small">
-                      {r.status === 'InProgress' && r.sentBack && <><strong>Sent back to you</strong> by {r.sentBack.returnedBy}: {r.sentBack.reason} · <Link to={`/requests/${r.requestId}/edit`}>Make the changes</Link></>}
-                      {r.status === 'InProgress' && !r.sentBack && <>Step {r.currentStep} of {r.totalSteps} ({r.currentStepName}), waiting on <strong>{r.waitingOn}</strong>{r.waitingSince && <span className="muted"> for {waitedFor(r.waitingSince)}</span>}</>}
-                      {r.status === 'Approved' && <>All {r.totalSteps} steps approved · {fmtDateTime(r.closedAt)}</>}
-                      {r.status === 'Rejected' && r.rejection && <span className="field-error">Rejected at step {r.rejection.stepOrder} ({r.rejection.stepName}): {r.rejection.reason}</span>}
-                      {r.status === 'Cancelled' && <>Cancelled by an administrator</>}
-                    </span>
-                  </div>
+              <article key={r.requestId} className="req-row">
+                <div className="req-head">
+                  <Link to={`/requests/${r.requestId}`} className="reqno">{r.requestNumber}</Link>
+                  <strong>{r.formName}</strong>
+                  <span>submitted {fmtDateTime(r.submittedAt)}</span>
                 </div>
-                <div className="sub-side">
-                  <StatusBadge status={r.sentBack ? 'Returned' : r.status} />
+                <div className="req-side">
+                  {r.sentBack ? <Link to={`/requests/${r.requestId}/edit`}><strong>Make the changes</strong></Link> : <StatusBadge status={r.status} />}
                   {r.pdfAvailable && (
                     <button className="link" onClick={() => { setPdfError(''); download(`/my/requests/${r.requestId}/pdf`, `${r.requestNumber}.pdf`).catch((e) => setPdfError(e.message)); }}>
                       {r.status === 'Rejected' ? 'Archived PDF' : 'Final PDF'}
                     </button>
                   )}
                 </div>
-              </li>
+                {r.status === 'InProgress' && r.sentBack && <p className="req-note back"><strong>Sent back to you</strong> by {r.sentBack.returnedBy}: {r.sentBack.reason}</p>}
+                {r.status === 'Rejected' && r.rejection && (
+                  <p className="req-note bad">Rejected at step {r.rejection.stepOrder} ({r.rejection.stepName}): {r.rejection.reason} <Link to={`/requests/new/${r.formId}?from=${r.requestId}`}>Start a new request with these details</Link></p>
+                )}
+                {r.status === 'Cancelled' && <p className="req-note muted">Cancelled by an administrator.</p>}
+                <SignOff steps={r.steps} toMe />
+              </article>
             ))}
-          </ul>
-          {pages > 1 && (
-            <div className="actions pager">
-              <button disabled={page <= 1} onClick={() => go({ page: String(page - 1) })}>← Newer</button>
-              <span className="muted small">Page {page} of {pages}</span>
-              <button disabled={page >= pages} onClick={() => go({ page: String(page + 1) })}>Older →</button>
-            </div>
-          )}
-        </>
-      )}
+            {pages > 1 && (
+              <div className="actions pager">
+                <button disabled={page <= 1} onClick={() => go({ page: String(page - 1) })}>← Newer</button>
+                <span className="muted small">Page {page} of {pages}</span>
+                <button disabled={page >= pages} onClick={() => go({ page: String(page + 1) })}>Older →</button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </section>
   );
 }
@@ -262,7 +243,7 @@ export function ResubmitPage() {
     <form className="stack" onSubmit={submit} noValidate>
       <div className="page-head">
         <div>
-          <p className="eyebrow">{req.formName} · {req.requestNumber}</p>
+          <p className="eyebrow">{req.formName} <span className="reqno">{req.requestNumber}</span></p>
           <h1>Make changes and resubmit</h1>
         </div>
         <StatusBadge status="Returned" />
@@ -305,12 +286,13 @@ export function RequestPage() {
     <div className="stack">
       <div className="page-head">
         <div>
-          <p className="eyebrow">{r.formName}</p>
-          <h1>{r.requestNumber}</h1>
-          <p className="muted">Submitted {fmtDateTime(r.submittedAt)}{r.closedAt && ` · closed ${fmtDateTime(r.closedAt)}`}</p>
+          <p className="eyebrow"><Link to={'/'}>My submissions</Link> / {r.requestNumber}</p>
+          <div className="title-row"><h1>{r.formName}</h1><span className="reqno">{r.requestNumber}</span></div>
+          <p className="muted">Submitted {fmtDateTime(r.submittedAt)}{r.closedAt && `, closed ${fmtDateTime(r.closedAt)}`}</p>
         </div>
         <StatusBadge status={r.sentBack ? 'Returned' : r.status} />
       </div>
+      <SignOff steps={r.steps} big toMe />
 
       {params.get('submitted') && r.status === 'InProgress' && <p className="notice ok" role="status">Submitted. We have emailed you a confirmation and notified the first approver.</p>}
       {params.get('resubmitted') && r.status === 'InProgress' && !r.sentBack && <p className="notice ok" role="status">Resubmitted. {r.progress.waitingOn} has been emailed and can decide now.</p>}
@@ -363,7 +345,7 @@ export function RequestPage() {
                   <p className="muted small" style={{ margin: 0 }}>
                     {s.status === 'Active' ? <>Waiting on <strong>{s.approver}</strong>{s.activatedAt && ` since ${fmtDateTime(s.activatedAt)} (${waitedFor(s.activatedAt)})`}</>
                       : s.status === 'Returned' ? `Sent back to you by ${r.sentBack?.returnedBy ?? s.approver} - waiting for your changes`
-                      : s.actedAt ? `${s.approver} · ${fmtDateTime(s.actedAt)}` : s.approver}
+                      : s.actedAt ? `${s.approver}, ${fmtDateTime(s.actedAt)}` : s.approver}
                   </p>
                   {/* earlier rounds at this step: what was asked, and what you changed */}
                   {backs.filter((x) => x.resubmittedAt).map((x, i) => (

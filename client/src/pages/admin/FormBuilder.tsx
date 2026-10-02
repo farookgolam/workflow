@@ -378,7 +378,7 @@ export function FormBuilder({ fields, onChange }: { fields: FieldDef[]; onChange
                 onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setSelected(i); } }}
               >
                 <div className="b-preview" aria-hidden="true"><FieldInput def={f} value={undefined} onChange={() => {}} /></div>
-                <span className="b-type">{TYPE_LABEL[f.type]}{hasWidth(f.type) && ` · ${WIDTH_LABEL[f.props?.width ?? 12]}`}{f.props?.lookupFrom && ' · auto-filled'}{isCalculated(f) && ' · calculated'}</span>
+                <span className="b-type">{TYPE_LABEL[f.type]}{hasWidth(f.type) && `, ${WIDTH_LABEL[f.props?.width ?? 12]}`}{f.props?.lookupFrom && ', auto-filled'}{isCalculated(f) && ', calculated'}</span>
                 {selected === i && (
                   <div className="b-tools" onClick={(e) => e.stopPropagation()}>
                     <button type="button" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Move earlier" title="Move earlier">↑</button>

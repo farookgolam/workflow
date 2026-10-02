@@ -27,38 +27,69 @@ export function HomePage() {
   const isApprover = user!.roles.includes('Approver') || user!.roles.includes('Admin');
   const isSubmitter = user!.roles.includes('Submitter');
   const forms = useLoad<{ forms: FormSummary[] }>(isSubmitter ? '/forms' : null);
+  const pending = useLoad<{ approvals: Pending[] }>(isApprover ? '/approvals/pending' : null);
+  const sentBack = useLoad<{ total: number }>(isSubmitter ? '/my/requests?status=Returned&pageSize=1' : null);
 
+  if (!isApprover && !isSubmitter) return <div className="card"><p className="muted">Your account has no role assigned yet. Please contact your administrator.</p></div>;
   return (
     <div className="stack">
-      {isApprover && <WaitingForMe />}
-
-      {isSubmitter && (
-        <>
-          <section className="card">
+      {(!isApprover || pending.data) && (!isSubmitter || sentBack.data) && (
+        <Lead waiting={pending.data?.approvals.length ?? 0} sentBack={sentBack.data?.total ?? 0} submitter={isSubmitter} />
+      )}
+      <div className={`home${isSubmitter ? '' : ' single'}`}>
+        <div className="home-main">
+          {isApprover && <WaitingForMe pending={pending} />}
+          {isSubmitter && <MySubmissions />}
+        </div>
+        {isSubmitter && (
+          <aside className="card bare home-side">
             <h2>Start a new request</h2>
-            {!forms.data ? <p className="muted">Loading…</p> : forms.data.forms.length === 0 ? <p className="muted">No forms are available yet.</p> : (
-              <div className="form-cards">
-                {forms.data.forms.map((f) => (
-                  <Link key={f.formId} to={`/requests/new/${f.formId}`} className="form-card">
-                    <strong>{f.name}</strong>
-                    {f.description && <span className="muted small">{f.description}</span>}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </section>
-          <MySubmissions />
+            <div className="sheet">
+              {!forms.data ? <p className="muted">Loading…</p> : forms.data.forms.length === 0 ? <p className="muted">No forms are available yet.</p> : (
+                <div className="form-cards">
+                  {forms.data.forms.map((f) => (
+                    <Link key={f.formId} to={`/requests/new/${f.formId}`} className="form-card">
+                      <strong>{f.name}</strong>
+                      {f.description && <span className="muted small">{f.description}</span>}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The first thing on the page: what needs this person, in one sentence. */
+function Lead({ waiting, sentBack, submitter }: { waiting: number; sentBack: number; submitter: boolean }) {
+  const many = (n: number) => (n === 1 ? 'One' : String(n));
+  return (
+    <div className="lead">
+      {waiting > 0 ? (
+        <>
+          <h1>{waiting} request{waiting === 1 ? ' is' : 's are'} waiting for your approval</h1>
+          {sentBack > 0 && <p>And {many(sentBack).toLowerCase()} of your own {sentBack === 1 ? 'was' : 'were'} sent back to you for changes.</p>}
+        </>
+      ) : sentBack > 0 ? (
+        <>
+          <h1>{many(sentBack)} of your requests need{sentBack === 1 ? 's' : ''} your changes</h1>
+          <p>An approver sent {sentBack === 1 ? 'it' : 'them'} back. Make the changes and resubmit, and {sentBack === 1 ? 'it goes' : 'they go'} straight back to the same step.</p>
+        </>
+      ) : (
+        <>
+          <h1>Nothing is waiting for you</h1>
+          <p>{submitter ? 'Start a new request, or follow the ones you have sent.' : 'Requests appear here when they reach your step.'}</p>
         </>
       )}
-
-      {!isApprover && !isSubmitter && <div className="card"><p className="muted">Your account has no role assigned yet. Please contact your administrator.</p></div>}
     </div>
   );
 }
 
 /** "Waiting for my approval", with tick boxes to approve several at once under one signature. */
-function WaitingForMe() {
-  const pending = useLoad<{ approvals: Pending[] }>('/approvals/pending');
+function WaitingForMe({ pending }: { pending: { data: { approvals: Pending[] } | null; error: string; reload(): void } }) {
   const [picked, setPicked] = useState<Set<number>>(new Set());
   const [open, setOpen] = useState(false); // the batch panel
   const [comments, setComments] = useState('');
@@ -111,15 +142,8 @@ function WaitingForMe() {
   };
 
   return (
-    <section className="card">
-      <div className="prev-head" style={{ marginBottom: '.75rem' }}>
-        <h2 style={{ margin: 0 }}>Waiting for my approval</h2>
-        {pickable.length > 1 && !open && (
-          <button className="primary" disabled={chosen.length === 0} onClick={() => { setOpen(true); setDone(null); }}>
-            Approve selected{chosen.length ? ` (${chosen.length})` : ''}
-          </button>
-        )}
-      </div>
+    <section className="card bare">
+      <h2>Waiting for my approval</h2>
 
       {done && (
         <div className={`notice ${done.results.every((r) => r.ok) ? 'ok' : ''}`} role="status" style={{ marginBottom: '1rem' }}>
@@ -147,10 +171,10 @@ function WaitingForMe() {
             {chosen.map((r) => (
               <li key={r.requestStepId}>
                 <div className="prev-head">
-                  <span><Link to={`/approvals/${r.requestStepId}`}>{r.requestNumber}</Link> · {r.formName} · from {r.submitterName} · step {r.stepOrder} of {r.totalSteps}</span>
+                  <span><Link to={`/approvals/${r.requestStepId}`} className="reqno">{r.requestNumber}</Link> <strong>{r.formName}</strong> from {r.submitterName}, step {r.stepOrder} of {r.totalSteps}</span>
                   <button className="link" disabled={busy} onClick={() => toggle(r.requestStepId)}>Remove</button>
                 </div>
-                {r.preview.length > 0 && <p className="muted small" style={{ margin: '.2rem 0 0' }}>{r.preview.map((f) => `${f.label}${/[?:]$/.test(f.label) ? '' : ':'} ${f.value}`).join(' · ')}</p>}
+                {r.preview.length > 0 && <p className="muted small" style={{ margin: '.2rem 0 0' }}>{r.preview.map((f) => `${f.label}${/[?:]$/.test(f.label) ? '' : ':'} ${f.value}`).join('; ')}</p>}
                 {r.choosesNext && r.nextStep && (
                   <div style={{ marginTop: '.5rem' }}>
                     <NextApproverPicker id={`next-${r.requestStepId}`} step={r.nextStep} totalSteps={r.totalSteps} when="as soon as you approve" value={choices[r.requestStepId] ?? null} disabled={busy}
@@ -188,34 +212,37 @@ function WaitingForMe() {
         </div>
       )}
 
-      {pending.error ? <p className="notice bad">{pending.error}</p> : !pending.data ? <p className="muted">Loading…</p> : rows.length === 0 ? <p className="muted">Nothing is waiting on you.</p> : !open && (
-        <table>
-          <thead>
-            <tr>
-              {pickable.length > 1 && <th style={{ width: '2rem' }}><input type="checkbox" aria-label="Select all" checked={all} onChange={toggleAll} /></th>}
-              <th>Request</th><th>Form</th><th>Submitted by</th><th>Step</th><th>Waiting since</th><th />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((p) => (
-              <tr key={p.requestStepId}>
-                {pickable.length > 1 && (
-                  <td>
-                    <input type="checkbox" aria-label={`Select ${p.requestNumber}`} checked={picked.has(p.requestStepId)} onChange={() => toggle(p.requestStepId)} />
-                  </td>
-                )}
-                <td><Link to={`/approvals/${p.requestStepId}`}>{p.requestNumber}</Link></td>
-                <td>{p.formName}</td>
-                <td>{p.submitterName}</td>
-                <td>{p.stepOrder} of {p.totalSteps} · {p.stepName}</td>
-                <td>{fmtDateTime(p.activatedAt)} <span className="muted small">({waitedFor(p.activatedAt)})</span></td>
-                <td>
-                  {p.overdue && <span className="badge badge-rejected">Overdue</span>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {!open && (
+        <div className="sheet">
+          {pending.error ? <p className="notice bad">{pending.error}</p> : !pending.data ? <p className="muted">Loading…</p> : rows.length === 0 ? <p className="muted">Nothing is waiting on you.</p> : (
+            <>
+              {rows.map((p) => {
+                // the first thing the submitter filled in says what the request is about
+                const about = p.preview[0]?.value;
+                return (
+                  <div key={p.requestStepId} className={`wait-row${pickable.length > 1 ? '' : ' nopick'}`}>
+                    {pickable.length > 1 && <input type="checkbox" aria-label={`Select ${p.requestNumber}`} checked={picked.has(p.requestStepId)} onChange={() => toggle(p.requestStepId)} />}
+                    <div className="wait-what">
+                      <strong><Link to={`/approvals/${p.requestStepId}`} className="reqno">{p.requestNumber}</Link> &nbsp;{about ?? p.formName}</strong>
+                      <span>{about ? `${p.formName} from ` : 'From '}{p.submitterName}, step {p.stepOrder} of {p.totalSteps} ({p.stepName})</span>
+                    </div>
+                    <div className={`wait-age${p.overdue ? ' late' : ''}`} title={`Waiting since ${fmtDateTime(p.activatedAt)}`}>Waiting {waitedFor(p.activatedAt)}{p.overdue && ', overdue'}</div>
+                    <Link to={`/approvals/${p.requestStepId}`} className="button">Review</Link>
+                  </div>
+                );
+              })}
+              {pickable.length > 1 && (
+                <div className="wait-foot">
+                  <label className="check"><input type="checkbox" aria-label="Select all" checked={all} onChange={toggleAll} /> Select all</label>
+                  <button className="primary" disabled={chosen.length === 0} onClick={() => { setOpen(true); setDone(null); }}>
+                    Approve selected{chosen.length ? ` (${chosen.length})` : ''}
+                  </button>
+                  <span>Tick the requests to approve together, then sign once.</span>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       )}
     </section>
   );

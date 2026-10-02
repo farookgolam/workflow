@@ -149,7 +149,7 @@ export function LoginPage() {
     return (
       <form className="card" onSubmit={submitPassword}>
         <h1>Enter your password key</h1>
-        <p className="muted">{email} · <button type="button" className="link" onClick={back}>change</button></p>
+        <p className="muted">{email} <button type="button" className="link" onClick={back}>change</button></p>
         {notices}
         {/* lets password managers pair the key with the right account */}
         <input type="email" autoComplete="username" value={email} readOnly hidden />
@@ -167,7 +167,7 @@ export function LoginPage() {
     return (
       <form className="card" onSubmit={submitReset}>
         <h1>Choose a new password key</h1>
-        <p className="muted">{email} · <button type="button" className="link" onClick={back}>change</button></p>
+        <p className="muted">{email} <button type="button" className="link" onClick={back}>change</button></p>
         {notices}
         <input type="email" autoComplete="username" value={email} readOnly hidden />
         <div className="field">
@@ -194,7 +194,7 @@ export function LoginPage() {
   return (
     <form className="card" onSubmit={submitSetup}>
       <h1>Create your password key</h1>
-      <p className="muted">{email} · <button type="button" className="link" onClick={back}>change</button></p>
+      <p className="muted">{email} <button type="button" className="link" onClick={back}>change</button></p>
       {notices}
       <input type="email" autoComplete="username" value={email} readOnly hidden />
       {start?.verification && (

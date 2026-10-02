@@ -93,6 +93,20 @@ myRouter.get('/requests', async (req, res) => {
       OFFSET @Offset ROWS FETCH NEXT @Size ROWS ONLY`,
     { UserId: req.user!.userId, Status: q.status ?? null, Offset: (q.page - 1) * q.pageSize, Size: q.pageSize },
   );
+  // every step of the requests on this page, for the sign-off strip: who signs, who signed, and when (never comments)
+  const ids = Object.fromEntries(rows.map((r, i) => [`R${i}`, r.RequestId as number]));
+  const steps = rows.length === 0 ? [] : await tenantQuery<Record<string, any>>(
+    req.user!.tenantId,
+    `SELECT rs.RequestId, rs.StepOrder, rs.StepName, rs.Status, rs.ActivatedAt, rs.ActedAt,
+            CASE WHEN rs.Status = 'Waiting' AND st.ApproverChosen = 1 THEN NULL ELSE COALESCE(bu.DisplayName, au.DisplayName) END AS Approver
+       FROM RequestSteps rs
+       JOIN Users au ON au.TenantId = rs.TenantId AND au.UserId = rs.AssignedUserId
+       JOIN ApprovalSteps st ON st.TenantId = rs.TenantId AND st.StepId = rs.StepId
+       LEFT JOIN Users bu ON bu.TenantId = rs.TenantId AND bu.UserId = rs.ActedByUserId
+      WHERE rs.TenantId = @TenantId AND rs.RequestId IN (${Object.keys(ids).map((k) => `@${k}`).join(', ')})
+      ORDER BY rs.RequestId, rs.StepOrder`,
+    ids,
+  );
   res.json({
     total: rows[0]?.Total ?? 0,
     page: q.page,
@@ -113,6 +127,9 @@ myRouter.get('/requests', async (req, res) => {
       closedAt: r.ClosedAt,
       rejection: r.Status === 'Rejected' ? { reason: r.RejectionReason, stepOrder: r.RejectedStepOrder, stepName: r.RejectedStepName } : null,
       pdfAvailable: r.PdfAvailable === 1,
+      steps: steps.filter((s) => s.RequestId === r.RequestId).map((s) => ({
+        stepOrder: s.StepOrder, name: s.StepName, status: s.Status, approver: s.Approver, activatedAt: s.ActivatedAt, actedAt: s.ActedAt,
+      })),
     })),
   });
 });

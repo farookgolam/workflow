@@ -17,7 +17,7 @@ export function GlobalApp() {
   return (
     <>
       <header className="topbar">
-        <Link to="/" className="brand">FileBank WorkFlow · Global</Link>
+        <Link to="/" className="brand">FileBank WorkFlow Global</Link>
         <nav className="nav" aria-label="Global management">
           <NavLink to="/" end>Customers</NavLink>
           <NavLink to="/administrators">Administrators</NavLink>

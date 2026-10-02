@@ -38,7 +38,7 @@ export function SendBackHistory({ items, title = 'Sent back for changes' }: { it
         {done.map((x, i) => (
           <li key={i} className="tracker-returned">
             <strong>Step {x.stepOrder}: {x.stepName}</strong>
-            <p className="muted small" style={{ margin: 0 }}>Sent back by {x.returnedBy} · {fmtDateTime(x.returnedAt)}</p>
+            <p className="muted small" style={{ margin: 0 }}>Sent back by {x.returnedBy}, {fmtDateTime(x.returnedAt)}</p>
             <blockquote>{x.reason}</blockquote>
             <p className="muted small" style={{ margin: 0 }}>Resubmitted {fmtDateTime(x.resubmittedAt)}</p>
             {x.resubmitNote && <blockquote>{x.resubmitNote}</blockquote>}

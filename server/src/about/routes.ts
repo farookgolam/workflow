@@ -51,7 +51,7 @@ const PURPOSE: Record<string, string> = {
   jsonwebtoken: 'Sign-in tokens', zod: 'Input checking', mssql: 'SQL Server connection', msnodesqlv8: 'SQL Server driver (Windows sign-in)',
   pdfkit: 'PDF records', exceljs: 'Excel import and export', archiver: 'ZIP exports', nodemailer: 'Email', 'node-html-parser': 'HTML form import',
   dotenv: 'Configuration', react: 'User interface', 'react-dom': 'User interface', 'react-router-dom': 'Page navigation',
-  '@fontsource-variable/outfit': 'Outfit typeface', vite: 'Builds the web pages', typescript: 'Programming language',
+  '@fontsource-variable/archivo': 'Archivo typeface', vite: 'Builds the web pages', typescript: 'Programming language',
 };
 
 type Library = { name: string; version: string; licence: string | null; purpose: string | null; part: 'Server' | 'Web pages' };

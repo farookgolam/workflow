@@ -81,8 +81,8 @@ function AddPeople({ onAdded }: { onAdded: () => void }) {
             {preview.warnings.map((w) => <p key={w} className="notice">{w}</p>)}
             <p>
               {preview.dryRun
-                ? <><strong>{preview.summary.add}</strong> to add · {preview.summary.exists} already users (skipped) · {preview.summary.errors} with problems (skipped)</>
-                : <><strong>{preview.summary.added}</strong> added · {preview.summary.exists} skipped · {preview.summary.errors} with problems</>}
+                ? <><strong>{preview.summary.add}</strong> to add, {preview.summary.exists} already users (skipped), {preview.summary.errors} with problems (skipped)</>
+                : <><strong>{preview.summary.added}</strong> added, {preview.summary.exists} skipped, {preview.summary.errors} with problems</>}
             </p>
             <div style={{ maxHeight: 360, overflow: 'auto' }}>
               <table>
@@ -230,7 +230,7 @@ export function AdminAudit() {
             </table>
             <div className="actions pager">
               <button disabled={page <= 1} onClick={() => set('page', String(page - 1))}>← Newer</button>
-              <span className="muted small">Page {page} of {pages} · {data.total} entries</span>
+              <span className="muted small">Page {page} of {pages}, {data.total} entries</span>
               <button disabled={page >= pages} onClick={() => set('page', String(page + 1))}>Older →</button>
             </div>
           </>

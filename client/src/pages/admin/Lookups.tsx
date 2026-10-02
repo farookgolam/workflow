@@ -256,7 +256,7 @@ export function AdminLookups() {
       {preview ? (
         <section className="card card-active">
           <h2>Import "{file?.name}"</h2>
-          <p className="muted">Sheet "{preview.sheetName}" · {preview.rowCount} row(s) · {preview.columns.length} column(s). Nothing is saved yet.</p>
+          <p className="muted">Sheet "{preview.sheetName}", {preview.rowCount} row(s), {preview.columns.length} column(s). Nothing is saved yet.</p>
           {preview.warnings.map((w) => <p key={w} className="notice">{w}</p>)}
           <div className="grid2">
             <label>Name of the lookup table<input value={name} onChange={(e) => setName(e.target.value)} maxLength={200} /></label>

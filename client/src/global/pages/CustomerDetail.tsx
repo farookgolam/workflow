@@ -321,11 +321,11 @@ export function CustomerDetail() {
           <p className="eyebrow"><Link to="/">Customers</Link></p>
           <h1>{tenant.name}</h1>
           <p className="muted">
-            Created {fmt(tenant.createdAt)} · {tenant.counts.users} people · {tenant.counts.requests} requests
+            Created {fmt(tenant.createdAt)}, {tenant.counts.users} people, {tenant.counts.requests} requests
             {tenant.removedAt ? (
-              <> · <span className="badge badge-rejected">Removed · deleted on {fmtDay(tenant.purgeAfter)}</span></>
+              <> <span className="badge badge-rejected">Removed, deleted on {fmtDay(tenant.purgeAfter)}</span></>
             ) : (
-              !tenant.isActive && <> · <span className="badge badge-rejected">Suspended</span></>
+              !tenant.isActive && <> <span className="badge badge-rejected">Suspended</span></>
             )}
           </p>
         </div>
