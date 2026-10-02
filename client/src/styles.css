@@ -54,6 +54,7 @@ p { margin: 0 0 .75rem; }
 .brand::before { content: ""; width: 12px; height: 24px; background: var(--yellow); border-radius: 3px; }
 .brand:has(img)::before { display: none; }
 .brand img { background: #fff; border-radius: 4px; padding: 2px; }
+.brand img.own { background: none; border-radius: 0; padding: 0; height: 32px; width: auto; display: block; }
 .tenant { font-size: .8rem; padding: .1rem .5rem; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); }
 .spacer { flex: 1; }
 .who { color: var(--bar-text) !important; font-size: .92rem; text-decoration: none; }
@@ -416,6 +417,8 @@ nav.seg a.on { background: var(--on); color: var(--on-text); font-weight: 600; }
 .auth-mark::before { content: ""; width: 12px; height: 26px; background: var(--yellow); border-radius: 2px; }
 .auth-mark:has(img)::before { display: none; }
 .auth-mark img { height: 34px; background: #fff; border-radius: 4px; padding: 3px; }
+.auth-mark.own { flex-direction: column; align-items: flex-start; gap: .7rem; }
+.auth-mark img.own { height: 64px; max-width: 100%; width: auto; background: none; border-radius: 0; padding: 0; object-fit: contain; }
 .auth-title { font-size: clamp(1.8rem, 3.2vw, 2.7rem); font-weight: 700; font-stretch: 112%; line-height: 1.1; letter-spacing: -.012em; margin: 0 0 .8rem; max-width: 12ch; }
 .auth-title em { font-style: normal; }
 .auth-lead { color: #c5ccd6; max-width: 34ch; margin: 0; }

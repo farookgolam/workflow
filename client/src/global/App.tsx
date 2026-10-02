@@ -17,7 +17,8 @@ export function GlobalApp() {
   return (
     <>
       <header className="topbar">
-        <Link to="/" className="brand">FileBank WorkFlow Global</Link>
+        {/* FileBank's own site: the FileBank badge (it has a white outline for dark bars), then the product */}
+        <Link to="/" className="brand"><img className="own" src="/filebank-logo.png" alt="FileBank" />WorkFlow Global</Link>
         <nav className="nav" aria-label="Global management">
           <NavLink to="/" end>Customers</NavLink>
           <NavLink to="/administrators">Administrators</NavLink>
