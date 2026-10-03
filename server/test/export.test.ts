@@ -128,4 +128,21 @@ describe('PDF export', () => {
     expect(await lastExportAudit()).toMatchObject({ files: 1, status: 'Approved', changedBy: expect.stringContaining('@') });
     expect((await request(app).get(`${api}/global/tenants/${t.tenantId}/forms`).set(bearer(tok.admin))).status).toBe(401); // a customer's token is not a global one
   });
+
+  it('the console\'s customer list says how much room each customer\'s files take, and how many active administrators it has', async () => {
+    const list = (await request(app).get(`${api}/global/tenants`).set(bearer(globalTok))).body.tenants as { tenantId: number; storageBytes: number; counts: { users: number; admins: number } }[];
+    const mine = list.find((x) => x.tenantId === t.tenantId)!;
+    // exactly the recorded sizes of its stored PDFs (it has no approver documents) - and nobody else's
+    const [{ Bytes, Files }] = await tenantQuery<{ Bytes: string; Files: number }>(t.tenantId, 'SELECT SUM(CAST(SizeBytes AS BIGINT)) AS Bytes, COUNT(*) AS Files FROM RequestDocuments WHERE TenantId = @TenantId');
+    expect(Files).toBeGreaterThan(0);
+    expect(mine.storageBytes).toBe(Number(Bytes));
+    expect(mine.storageBytes).toBeGreaterThan(1000);
+    expect(list.find((x) => x.tenantId === other.tenantId)!.storageBytes).toBe(0); // the other customer closed nothing
+    // a deactivated administrator is not counted
+    expect(mine.counts.admins).toBe(1);
+    await tenantQuery(t.tenantId, 'UPDATE Users SET IsActive = 0 WHERE TenantId = @TenantId AND UserId = @U', { U: ids.admin });
+    const again = (await request(app).get(`${api}/global/tenants/${t.tenantId}`).set(bearer(globalTok))).body.tenant;
+    expect(again.counts.admins).toBe(0);
+    expect(again.storageBytes).toBe(mine.storageBytes);
+  });
 });

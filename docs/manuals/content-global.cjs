@@ -58,7 +58,9 @@ module.exports = {
     { table: { widths: [0.24, 0.76], head: ["Column", "Meaning"], rows: [
       ["Customer", "The organisation's name. **Suspended** means nobody there can sign in; **Removed** shows the date its data will be deleted."],
       ["Address", "The short name its site is reached at."],
-      ["People / Forms", "Active user accounts / active forms."],
+      ["People", "Active user accounts, and in brackets how many of them are administrators."],
+      ["Storage (MB)", "The room its files take, in megabytes: the final PDFs of its closed requests and the documents its approvers attached - whether they are kept in the database or in the customer's own folder. Each file's size is recorded when it is saved, so the figure is exact. The requests' own text is not counted; it is small beside the files."],
+      ["Forms", "Active forms."],
       ["Requests", "Total requests, and how many are still open."],
       ["Last activity", "The most recent audited event there. A customer with no activity for a long time is worth asking about."],
     ] } },

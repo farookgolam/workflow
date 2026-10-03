@@ -54,6 +54,7 @@ interface TenantRow {
   CreatedAt: Date;
   Users: number;
   Admins: number;
+  StorageBytes: number | string;
   Forms: number;
   Requests: number;
   OpenRequests: number;
@@ -73,6 +74,8 @@ const shape = (r: TenantRow) => ({
   isActive: r.IsActive,
   createdAt: r.CreatedAt,
   counts: { users: r.Users, admins: r.Admins, forms: r.Forms, requests: r.Requests, openRequests: r.OpenRequests },
+  // bytes of its final PDFs and approvers' documents (a BIGINT arrives as text)
+  storageBytes: Number(r.StorageBytes),
   lastActivityAt: r.LastActivityAt,
   // set once a global administrator removes it: the data is deleted for good at purgeAfter
   removedAt: r.RemovedAt,
@@ -84,7 +87,12 @@ const shape = (r: TenantRow) => ({
 const SUMMARY = `
   SELECT t.TenantId, t.Name, t.Slug, t.Host, t.AdminNotifyEmail, t.IsActive, t.CreatedAt, t.RemovedAt, t.PurgeAfter, t.FileStorageRoot,
          (SELECT COUNT(*) FROM Users u WHERE u.TenantId = t.TenantId AND u.IsActive = 1) AS Users,
-         (SELECT COUNT(*) FROM UserRoles r WHERE r.TenantId = t.TenantId AND r.Role = 'Admin') AS Admins,
+         (SELECT COUNT(*) FROM UserRoles r JOIN Users au ON au.TenantId = r.TenantId AND au.UserId = r.UserId
+           WHERE r.TenantId = t.TenantId AND r.Role = 'Admin' AND au.IsActive = 1) AS Admins,
+         -- what its files take up: final PDFs and approvers' documents, in the database or in its own folder.
+         -- The size of each was recorded when it was saved, so nothing is read from disk here.
+         (SELECT COALESCE(SUM(CAST(d.SizeBytes AS BIGINT)), 0) FROM RequestDocuments d WHERE d.TenantId = t.TenantId)
+           + (SELECT COALESCE(SUM(CAST(s.SizeBytes AS BIGINT)), 0) FROM StepAttachments s WHERE s.TenantId = t.TenantId) AS StorageBytes,
          (SELECT COUNT(*) FROM Forms f WHERE f.TenantId = t.TenantId AND f.IsActive = 1) AS Forms,
          (SELECT COUNT(*) FROM Requests q WHERE q.TenantId = t.TenantId) AS Requests,
          (SELECT COUNT(*) FROM Requests q WHERE q.TenantId = t.TenantId AND q.Status = 'InProgress') AS OpenRequests,

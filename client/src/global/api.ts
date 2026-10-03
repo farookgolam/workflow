@@ -98,6 +98,8 @@ export interface TenantSummary {
   isActive: boolean;
   createdAt: string;
   counts: { users: number; admins: number; forms: number; requests: number; openRequests: number };
+  /** Bytes taken by its final PDFs and approvers' documents (in the database or in its own folder). */
+  storageBytes: number;
   lastActivityAt: string | null;
   /** Set once removed: kept (restorable) until purgeAfter, then deleted for good. */
   removedAt: string | null;

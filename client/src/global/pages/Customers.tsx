@@ -10,6 +10,11 @@ interface Stats {
 }
 
 const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '—');
+/** Bytes as megabytes with two decimals: 1,572,864 -> "1.50". Anything under 0.01 MB that is not empty shows as "< 0.01". */
+const megabytes = (bytes: number) => {
+  const mb = bytes / (1024 * 1024);
+  return bytes > 0 && mb < 0.005 ? '< 0.01' : mb.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
 
 /** Turns "Acme Corp" into "acme-corp", which is what the address will be. */
 const slugify = (name: string) =>
@@ -151,7 +156,7 @@ export function Customers() {
       ) : (
         <table className="sample-table">
           <thead>
-            <tr><th>Customer</th><th>Address</th><th>People</th><th>Forms</th><th>Requests</th><th>Last activity</th><th /></tr>
+            <tr><th>Customer</th><th>Address</th><th className="num">People</th><th className="num" title="Final PDFs and approvers' documents">Storage (MB)</th><th className="num">Forms</th><th className="num">Requests</th><th>Last activity</th><th /></tr>
           </thead>
           <tbody>
             {tenants.data.tenants.map((t) => (
@@ -165,7 +170,8 @@ export function Customers() {
                   )}
                 </td>
                 <td className="mono">{t.host ?? t.slug}</td>
-                <td className="num">{t.counts.users}</td>
+                <td className="num">{t.counts.users} <span className="muted small">({t.counts.admins} admin{t.counts.admins === 1 ? '' : 's'})</span></td>
+                <td className="num">{megabytes(t.storageBytes)}</td>
                 <td className="num">{t.counts.forms}</td>
                 <td className="num">{t.counts.requests} ({t.counts.openRequests} open)</td>
                 <td>{fmt(t.lastActivityAt)}</td>
