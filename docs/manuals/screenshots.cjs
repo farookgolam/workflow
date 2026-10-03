@@ -500,6 +500,11 @@ const SHOTS = {
     await p.type('#reason', 'Ticket 4821 - form will not publish'); await highlight(p, 'button', 'Start support session');
     await save(p, 'global-08-support', await clipOf(p, 'section.card', 'Support access'));
   },
+  async 'global-11-activity'(b) {
+    const p = await console_(b); await gGo(p, '/activity');
+    await p.waitForSelector('table'); await highlight(p, '.nav a', 'Activity');
+    await save(p, 'global-11-activity', { x: 0, y: 0, width: 1280, height: 520 });
+  },
   async 'global-10-about'(b) {
     const p = await console_(b); await gGo(p, '/about');
     await p.waitForSelector('.about-table'); await save(p, 'global-10-about', { x: 0, y: 0, width: 1280, height: 1100 });

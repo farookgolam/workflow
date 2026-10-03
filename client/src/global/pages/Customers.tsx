@@ -6,7 +6,6 @@ import { useGlobalAction, useGlobalLoad } from '../hooks';
 
 interface Stats {
   totals: { tenants: number; activeTenants: number; users: number; requests: number; openRequests: number; failedEmails: number; queuedEmails: number };
-  recentActivity: { at: string; action: string; tenantName: string | null; by: string | null }[];
 }
 
 const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '—');
@@ -181,20 +180,7 @@ export function Customers() {
           </tbody>
         </table>
       )}
-
-      {stats.data && stats.data.recentActivity.length > 0 && (
-        <section className="card stack">
-          <h2>Recent management activity</h2>
-          <table className="sample-table">
-            <thead><tr><th>When</th><th>What</th><th>Customer</th><th>By</th></tr></thead>
-            <tbody>
-              {stats.data.recentActivity.map((a, i) => (
-                <tr key={i}><td>{fmt(a.at)}</td><td className="mono">{a.action}</td><td>{a.tenantName ?? '—'}</td><td>{a.by ?? '—'}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
+      {/* what global administrators did is on its own tab: Activity */}
     </>
   );
 }

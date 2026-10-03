@@ -474,7 +474,7 @@ platformStatsRouter.get('/', async (_req, res) => {
            (SELECT COUNT(*) FROM Notifications WHERE Status = 'Queued') AS QueuedEmails`);
 
   const recent = await unscopedQuery<Record<string, unknown>>(`
-    SELECT TOP 20 p.CreatedAt, p.Action, p.EntityType, p.EntityId, p.TenantId,
+    SELECT TOP 100 p.CreatedAt, p.Action, p.EntityType, p.EntityId, p.TenantId, -- the console's Activity tab
            -- a removed customer is gone from Tenants; its name survives in the tenant.deleted entry
            COALESCE(t.Name, (SELECT TOP 1 JSON_VALUE(d.DetailJson, '$.name') FROM PlatformAuditLog d
                               WHERE d.TenantId = p.TenantId AND d.Action = 'tenant.deleted')) AS TenantName,

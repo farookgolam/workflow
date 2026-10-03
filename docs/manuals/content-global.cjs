@@ -64,7 +64,11 @@ module.exports = {
       ["Requests", "Total requests, and how many are still open."],
       ["Last activity", "The most recent audited event there. A customer with no activity for a long time is worth asking about."],
     ] } },
-    { p: "**Recent management activity** below the list shows the last 20 things global administrators did, and who. It comes from the platform audit log, which records every action in the console and can never be changed." },
+    { task: "See what global administrators did",
+      steps: [
+        { text: "Choose **Activity** in the top bar. The list shows the last 100 things global administrators did in the console, newest first: **when**, **what** (for example tenant.created or tenant.admin_granted), for which **customer**, and **by** whom.", img: "screens/global-11-activity.jpg", maxH: 260 },
+      ],
+      result: "It comes from the platform audit log, which records every action in the console and can never be changed. What you do inside a customer (settings, support sessions) is also written to that customer's own audit log." },
     { task: "Create a customer",
       need: "the organisation's name and the email and name of the person who will set it up.",
       steps: [

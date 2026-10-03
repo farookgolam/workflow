@@ -4,6 +4,7 @@ import { ThemeToggle } from '../theme';
 import { gapi } from './api';
 import { useGlobalAuth } from './auth';
 import { About } from './pages/About';
+import { Activity } from './pages/Activity';
 import { Customers } from './pages/Customers';
 import { CustomerDetail } from './pages/CustomerDetail';
 import { GlobalAdmins } from './pages/GlobalAdmins';
@@ -22,6 +23,7 @@ export function GlobalApp() {
         <nav className="nav" aria-label="Global management">
           <NavLink to="/" end>Customers</NavLink>
           <NavLink to="/administrators">Administrators</NavLink>
+          <NavLink to="/activity">Activity</NavLink>
           <NavLink to="/about">About</NavLink>
         </nav>
         <span className="spacer" />
@@ -35,6 +37,7 @@ export function GlobalApp() {
           <Route path="/" element={<Customers />} />
           <Route path="/customers/:tenantId" element={<CustomerDetail />} />
           <Route path="/administrators" element={<GlobalAdmins />} />
+          <Route path="/activity" element={<Activity />} />
           <Route path="/about" element={<About />} />
           <Route path="*" element={<div className="card"><h1>Page not found</h1><Link to="/">Go to the customer list</Link></div>} />
         </Routes>
