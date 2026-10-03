@@ -129,6 +129,37 @@ describe('PDF export', () => {
     expect((await request(app).get(`${api}/global/tenants/${t.tenantId}/forms`).set(bearer(tok.admin))).status).toBe(401); // a customer's token is not a global one
   });
 
+  it('a global administrator can export every customer with its figures as an Excel sheet; a customer\'s administrator cannot', async () => {
+    const res = await binary(request(app).get(`${api}/global/tenants/export.xlsx`).set(bearer(globalTok)));
+    expect(res.status).toBe(200);
+    expect(res.headers['content-disposition']).toMatch(/filename="FileBank-WorkFlow-Customers_\d{4}-\d{2}-\d{2}\.xlsx"/);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(res.body as Buffer);
+    const ws = wb.getWorksheet('Customers')!;
+    const head = (ws.getRow(1).values as unknown[]).slice(1) as string[];
+    expect(head).toEqual(expect.arrayContaining(['Customer', 'Status', 'People (active)', 'Administrators', 'Administrator emails', 'Storage (MB)', 'Final PDFs', 'Requests', 'Last activity (UTC)']));
+    const col = (name: string) => head.indexOf(name) + 1;
+    let mine: ExcelJS.Row | undefined;
+    ws.eachRow((r) => { if (r.getCell(col('Address')).value === t.slug) mine = r; });
+    expect(mine).toBeDefined();
+    const cell = (name: string) => mine!.getCell(col(name)).value;
+    expect(cell('Status')).toBe('Active');
+    expect(cell('People (active)')).toBe(3);
+    expect(cell('Administrators')).toBe(1);
+    expect(cell('Administrator emails')).toBe('admin@ex.test');
+    expect(cell('Approvers')).toBe(1);
+    expect(cell('Final PDFs')).toBeGreaterThan(0);
+    expect(cell('Requests')).toBe(Number(cell('Approved')) + Number(cell('Rejected')) + Number(cell('In progress')) + Number(cell('Cancelled')));
+    const [{ Bytes }] = await tenantQuery<{ Bytes: string }>(t.tenantId, 'SELECT SUM(CAST(SizeBytes AS BIGINT)) AS Bytes FROM RequestDocuments WHERE TenantId = @TenantId');
+    expect(cell('Storage (MB)')).toBe(Math.round((Number(Bytes) / 1048576) * 100) / 100);
+    expect(cell('New files are kept in')).toBe('The database');
+    // the console's own log records the export
+    const stats = await request(app).get(`${api}/global/stats`).set(bearer(globalTok));
+    expect(stats.body.recentActivity[0]).toMatchObject({ action: 'tenants.exported' });
+    // not for a customer's administrator
+    expect((await request(app).get(`${api}/global/tenants/export.xlsx`).set(bearer(tok.admin))).status).toBe(401);
+  });
+
   it('the console\'s customer list says how much room each customer\'s files take, and how many active administrators it has', async () => {
     const list = (await request(app).get(`${api}/global/tenants`).set(bearer(globalTok))).body.tenants as { tenantId: number; storageBytes: number; counts: { users: number; admins: number } }[];
     const mine = list.find((x) => x.tenantId === t.tenantId)!;

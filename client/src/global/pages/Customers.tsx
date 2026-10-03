@@ -1,7 +1,7 @@
 // The customer list: every organisation on this installation, plus the form that creates one.
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { gapi, type TenantSummary } from '../api';
+import { gapi, gdownload, type TenantSummary } from '../api';
 import { useGlobalAction, useGlobalLoad } from '../hooks';
 
 interface Stats {
@@ -129,12 +129,21 @@ export function Customers() {
   const tenants = useGlobalLoad<{ tenants: TenantSummary[] }>('/tenants');
   const stats = useGlobalLoad<Stats>('/stats');
   const reloadAll = () => { tenants.reload(); stats.reload(); };
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   // set by the customer page after "Remove customer"
   const notice = (useLocation().state as { notice?: string } | null)?.notice;
 
   return (
     <>
-      <div className="page-head"><h1>Customers</h1></div>
+      <div className="page-head">
+        <h1>Customers</h1>
+        {/* every customer with all the console knows about it: people, forms, requests, storage, dates */}
+        <button disabled={exporting} onClick={() => { setExporting(true); setExportError(''); gdownload('/tenants/export.xlsx', 'FileBank-WorkFlow-Customers.xlsx').catch((e: Error) => setExportError(e.message)).finally(() => setExporting(false)); }}>
+          {exporting ? 'Preparing…' : 'Export to Excel'}
+        </button>
+      </div>
+      {exportError && <p className="notice error" role="alert">{exportError}</p>}
       {notice && <p className="notice">{notice}</p>}
       {stats.data && (
         <div className="tiles">

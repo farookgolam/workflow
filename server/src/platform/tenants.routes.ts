@@ -21,6 +21,7 @@ import { checkFileRoot } from '../customer-files/files';
 import { exportQuery, previewExport } from '../archive/export';
 import { sendExport } from '../archive/export.routes';
 import { hostSchema, provisionTenant, slugSchema } from './provision';
+import { customersWorkbook } from './tenants-export';
 
 export const platformTenantsRouter = Router();
 
@@ -102,6 +103,19 @@ const SUMMARY = `
 platformTenantsRouter.get('/', async (_req, res) => {
   const rows = await unscopedQuery<TenantRow>(`${SUMMARY} ORDER BY t.Name`);
   res.json({ tenants: rows.map(shape) });
+});
+
+// Every customer with all the console knows about it, as one Excel sheet. (Before '/:tenantId', or "export.xlsx"
+// would be taken for a customer's number.)
+platformTenantsRouter.get('/export.xlsx', async (req, res) => {
+  const { file, customers } = await customersWorkbook();
+  const d = new Date();
+  const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  await platformAudit(req, req.platformAdmin!.platformAdminId, { action: 'tenants.exported', entityType: 'Tenant', detail: { customers } });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="FileBank-WorkFlow-Customers_${day}.xlsx"`);
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.send(file);
 });
 
 async function loadOr404(tenantId: number): Promise<TenantRow> {

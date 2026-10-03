@@ -64,6 +64,11 @@ module.exports = {
       ["Requests", "Total requests, and how many are still open."],
       ["Last activity", "The most recent audited event there. A customer with no activity for a long time is worth asking about."],
     ] } },
+    { task: "Export the customer list to Excel",
+      steps: [
+        "On **Customers** choose **Export to Excel** (top right).",
+      ],
+      result: "The file **FileBank-WorkFlow-Customers_<date>.xlsx** has one row per customer, including suspended and removed ones, with everything the console knows about it: status, address and site, date created, people (active, administrators and their emails, approvers, not signed in yet, deactivated), active forms, requests in total and by status, storage in megabytes (final PDFs and approver documents, each with its count), where new files are kept, look-up lists, failed emails, last activity and last sign-in. Dates are in UTC. The headings can be filtered and sorted. It holds counts and sizes only - nothing a customer's people wrote. The export is recorded on the **Activity** tab as tenants.exported." },
     { task: "See what global administrators did",
       steps: [
         { text: "Choose **Activity** in the top bar. The list shows the last 100 things global administrators did in the console, newest first: **when**, **what** (for example tenant.created or tenant.admin_granted), for which **customer**, and **by** whom.", img: "screens/global-11-activity.jpg", maxH: 260 },
